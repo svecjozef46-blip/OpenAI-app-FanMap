@@ -55,3 +55,11 @@ Stack to zvládne bez zmeny (Mapbox GL JS renderuje akékoľvek hranice ako vekt
 
 ## Otvorené otázky
 - názov domény (závisí od výsledku overenia globalfansmap.com / kolízie názvu, viď business-case.md)
+
+## Udržateľnosť a odovzdateľnosť kódu (doplnené 2026-10-19)
+Používateľ nie je developer. Appka musí byť postavená tak, aby ju vedel buď sám jednoducho udržiavať (meniť texty, pridávať zápasy cez admin, sledovať chyby), alebo ju neskôr bez trenia odovzdať skúsenému developerovi (v súlade s cieľom z business-case.md — partner/predaj). Toto je teraz záväzná požiadavka na štýl kódu, nie len "pekné by bolo":
+- konvenčné, bežne známe vzory (žiadne exotické abstrakcie ani "chytré" skratky) — kód musí vyzerať tak, ako by ho napísal priemerný skúsený React/Next.js developer, nie ako osobná vychytávka
+- komentáre pri netriviálnych miestach vysvetľujúce PREČO, nie len čo (napr. prečo je výber zápasu a hlasovanie prísne oddelené — viď dev-prompt-chatgpt.md, toto spôsobilo problémy v minulosti)
+- README vždy aktuálny a dostatočný na to, aby cudzí developer rozbehol projekt bez toho, aby sa musel pýtať používateľa
+- žiadne tajomstvá/kľúče v kóde — všetko cez .env, presne podľa .env.example
+- commit správy popisujúce čo a prečo sa zmenilo (pre budúcu orientáciu, nie len pre mňa)
