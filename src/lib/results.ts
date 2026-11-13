@@ -12,7 +12,11 @@ import type { CountryResult, MatchResultRow, MatchWithTeams } from "@/lib/types"
 // definitely raise this (likely well above 3) before any B2B/media pitch —
 // see docs/business-case.md "Monetizácia": sample credibility is the whole
 // pitch there.
-export const MIN_VOTES_TO_COLOR = 3;
+//
+// Overridable via NEXT_PUBLIC_MIN_VOTES_TO_COLOR (e.g. 1 in .env.local, so
+// a single test vote colors your country while developing). Production
+// should leave it unset → 3.
+export const MIN_VOTES_TO_COLOR = Math.max(1, Number(process.env.NEXT_PUBLIC_MIN_VOTES_TO_COLOR) || 3);
 
 // Turns the raw (team, country, count) rows from the match_results view
 // into one roll-up per country, deciding a leading team only when the

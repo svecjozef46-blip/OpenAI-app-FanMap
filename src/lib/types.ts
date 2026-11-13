@@ -68,3 +68,8 @@ export type CountryResult = {
   // See MIN_VOTES_TO_COLOR in lib/mapConfig.ts.
   leadingTeamId: string | null;
 };
+
+// Vote totals for one match (summed over all countries), for match cards
+// and the "Trending" badge. Computed from the match_results view — the
+// votes table itself stays the single source of truth.
+export type MatchTotals = { home: number; away: number };

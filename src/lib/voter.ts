@@ -44,7 +44,7 @@ export function getMyVoteForMatch(matchId: string): string | null {
   return readMyVotes()[matchId] ?? null;
 }
 
-// Listeners notified whenever a vote is recorded, so every VoteButton on
+// Listeners notified whenever a vote is recorded, so every component on
 // screen re-reads its "have I voted" state immediately — not just the one
 // that was clicked (e.g. if the same match's row somehow renders twice).
 // This is the subscribe side of the useSyncExternalStore store below.

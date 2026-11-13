@@ -12,8 +12,87 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Horizontal scrollers (league tabs, mobile match strip) without a visible
+   scrollbar — they're still scrollable by touch, trackpad and keyboard. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Keeps the Mapbox attribution/logo readable against the dark-v11 style
    without fighting Mapbox's own CSS specificity everywhere else. */
 .mapboxgl-ctrl-logo {
   opacity: 0.6;
+}
+.mapboxgl-ctrl-attrib {
+  background: rgba(9, 9, 11, 0.6) !important;
+}
+.mapboxgl-ctrl-attrib a {
+  color: #a1a1aa !important;
+}
+.mapboxgl-ctrl-group {
+  background: rgba(24, 24, 27, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.mapboxgl-ctrl-group button + button {
+  border-top-color: rgba(255, 255, 255, 0.1) !important;
+}
+.mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  filter: invert(1) opacity(0.75);
+}
+
+/* Country tooltip on the match map (GlobalMap.tsx). Dark glass card that
+   matches the rest of the UI instead of Mapbox's default white bubble. */
+.fanmap-popup .mapboxgl-popup-content {
+  background: rgba(24, 24, 27, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #e4e4e7;
+  font: 12px/1.5 var(--font-sans), system-ui, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  min-width: 140px;
+}
+.fanmap-popup .mapboxgl-popup-tip {
+  display: none;
+}
+.fanmap-popup__title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fafafa;
+  margin-bottom: 4px;
+}
+.fanmap-popup__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fanmap-popup__row b {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.fanmap-popup__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  display: inline-block;
+}
+.fanmap-popup__muted {
+  color: #a1a1aa;
+  margin-top: 2px;
+}
+
+/* Gentle fade-in used by the landing-page match chip (HeroShowcase.tsx). */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

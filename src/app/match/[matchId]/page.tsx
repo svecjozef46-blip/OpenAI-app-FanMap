@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getMatchById, getVisibleMatches } from "@/lib/queries";
-import { MatchExperience } from "@/components/MatchExperience";
+import { loadMatchScreenData } from "@/lib/matchPage";
+import { MatchScreen } from "@/components/MatchScreen";
 
 // Per-match direct URL (dev-prompt-chatgpt.md "SHARING": "/match/{matchId}
 // ... opening it loads the app, selects the correct match, map, and
@@ -9,15 +10,11 @@ import { MatchExperience } from "@/components/MatchExperience";
 // tech-stack.md chose Next.js over Vite: a shared link needs to show the
 // actual match in its social preview card, not a generic site thumbnail —
 // that only works with metadata generated server-side per match.
-// Always reflects the current match/vote state server-side, so — same as
-// app/page.tsx — it opts out of Next.js 16's default static prerendering.
+// Always reflects the current match/vote state, so — same as app/page.tsx
+// — it opts out of Next.js 16's default static prerendering.
 export const instant = false;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ matchId: string }>;
-}): Promise<Metadata> {
+export async function generateMetadata({ params }: PageProps<"/match/[matchId]">): Promise<Metadata> {
   const { matchId } = await params;
   const match = await getMatchById(matchId);
   if (!match) {
@@ -33,28 +30,30 @@ export async function generateMetadata({
   };
 }
 
-export default async function MatchPage({
-  params,
-}: {
-  params: Promise<{ matchId: string }>;
-}) {
+export default async function MatchPage({ params }: PageProps<"/match/[matchId]">) {
   const { matchId } = await params;
   const match = await getMatchById(matchId);
   if (!match) {
     notFound();
   }
 
-  const matches = await getVisibleMatches();
-  // The requested match might not be in the "visible" list (e.g. it just
-  // changed status) — include it explicitly so a direct link always works
-  // even if it wouldn't otherwise show up in the sidebar.
-  const allMatches = matches.some((m) => m.id === match.id)
-    ? matches
-    : [match, ...matches];
+  // Show the match among the other matches of its league, with that
+  // league's tab active.
+  const leagueMatches = await getVisibleMatches(match.league_id);
+  // A direct link must always work, even if the match isn't in the list
+  // (e.g. its status just changed) — include it explicitly.
+  const matches = leagueMatches.some((m) => m.id === match.id) ? leagueMatches : [match, ...leagueMatches];
+  const { leagues, totals } = await loadMatchScreenData(matches);
+  const league = leagues.find((l) => l.id === match.league_id);
 
   return (
-    <div className="min-h-0 flex-1">
-      <MatchExperience matches={allMatches} initialSelectedMatchId={match.id} />
-    </div>
+    <MatchScreen
+      leagues={leagues}
+      active={league?.slug ?? "all"}
+      title={league?.name ?? "Matches"}
+      matches={matches}
+      totals={totals}
+      selectedMatchId={match.id}
+    />
   );
 }

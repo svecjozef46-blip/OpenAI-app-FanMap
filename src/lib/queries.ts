@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import type { MatchWithTeams } from "@/lib/types";
+import type { League, MatchResultRow, MatchTotals, MatchWithTeams } from "@/lib/types";
 
 // Server-side data fetching for pages (app/page.tsx, app/match/[matchId]).
 // Runs at request time on the server, which is also what makes correct
@@ -29,22 +29,90 @@ function normalizeMatch(row: RawMatchRow): MatchWithTeams {
   };
 }
 
-// Non-archived matches, newest kickoff first, for the home page and the
-// match sidebar. Matches are visible via RLS even if a team happens to be
-// inactive (is_active only gates leagues/teams themselves) — fine for MVP
-// scope, revisit if a team gets deactivated mid-season.
-export async function getVisibleMatches(): Promise<MatchWithTeams[]> {
+// Non-archived matches (RLS hides archived ones), soonest kickoff first,
+// optionally limited to one league. Matches are visible via RLS even if a
+// team happens to be inactive (is_active only gates leagues/teams
+// themselves) — fine for MVP scope.
+export async function getVisibleMatches(leagueId?: string): Promise<MatchWithTeams[]> {
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
-    .from("matches")
-    .select(MATCH_SELECT)
-    .order("kickoff_at", { ascending: true });
+  let query = supabase.from("matches").select(MATCH_SELECT).order("kickoff_at", { ascending: true });
+  if (leagueId) query = query.eq("league_id", leagueId);
+  const { data, error } = await query;
 
   if (error) {
     console.error("Failed to load matches:", error);
     return [];
   }
   return (data ?? []).map((row) => normalizeMatch(row as unknown as RawMatchRow));
+}
+
+// Order of the league tabs in the top navigation: the big five domestic
+// leagues first, the Champions League last (product owner's choice), then
+// any league not listed here (e.g. one added later in /admin), A–Z.
+const LEAGUE_ORDER = [
+  "premier-league",
+  "la-liga",
+  "serie-a",
+  "bundesliga",
+  "ligue-1",
+  "champions-league",
+  "nfl",
+  "nba",
+  "mlb",
+  "nhl",
+  "mls",
+];
+
+// Active leagues for the top navigation (RLS hides inactive ones).
+export async function getActiveLeagues(): Promise<League[]> {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase.from("leagues").select("*").order("name");
+  if (error) {
+    console.error("Failed to load leagues:", error);
+    return [];
+  }
+  const rank = (slug: string) => {
+    const i = LEAGUE_ORDER.indexOf(slug);
+    return i === -1 ? LEAGUE_ORDER.length : i;
+  };
+  return [...data].sort((a, b) => rank(a.slug) - rank(b.slug));
+}
+
+export async function getLeagueBySlug(slug: string): Promise<League | null> {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase.from("leagues").select("*").eq("slug", slug).maybeSingle();
+  if (error) console.error("Failed to load league:", error);
+  return data ?? null;
+}
+
+// Per-country vote rows for some matches, from the public match_results
+// view (aggregated counts only — never raw votes).
+export async function getMatchResultRows(matchIds: string[]): Promise<MatchResultRow[]> {
+  if (matchIds.length === 0) return [];
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("match_results")
+    .select("match_id, team_id, country_code, vote_count")
+    .in("match_id", matchIds);
+  if (error) {
+    console.error("Failed to load match results:", error);
+    return [];
+  }
+  return data as MatchResultRow[];
+}
+
+// Home/away vote totals per match, for match cards and "Trending".
+export async function getMatchTotals(matches: MatchWithTeams[]): Promise<Record<string, MatchTotals>> {
+  const rows = await getMatchResultRows(matches.map((m) => m.id));
+  const totals: Record<string, MatchTotals> = {};
+  for (const m of matches) totals[m.id] = { home: 0, away: 0 };
+  for (const row of rows) {
+    const match = matches.find((m) => m.id === row.match_id);
+    if (!match) continue;
+    if (row.team_id === match.home_team_id) totals[match.id].home += row.vote_count;
+    else if (row.team_id === match.away_team_id) totals[match.id].away += row.vote_count;
+  }
+  return totals;
 }
 
 export async function getMatchById(matchId: string): Promise<MatchWithTeams | null> {

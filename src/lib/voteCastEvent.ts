@@ -1,6 +1,6 @@
 // A plain DOM CustomEvent, not a state-management library, carries the
-// "a vote was just cast" signal from VoteButton (nested inside the match
-// sidebar) up to MatchExperience (which owns the map and header) so results
+// "a vote was just cast" signal from useVote (lib/useVote.ts, used by the
+// match header) to useMatchResults, so the map and counts
 // refresh immediately after your own vote instead of waiting for the next
 // poll. Reaching for Redux/Zustand/Context for one cross-component signal
 // in an app this size would be the "unnecessary abstraction"

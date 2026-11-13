@@ -31,7 +31,7 @@ Appka beží na `http://localhost:3000`.
 
 ## Databáza
 
-Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
+Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
 
 Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decisions-log.md`):
 - Tabuľka `votes` nemá pre `anon`/`authenticated` role žiadne RLS politiky — priamy prístup (čítanie aj zápis) je úplne zablokovaný.
@@ -39,14 +39,46 @@ Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decision
 - Čítanie výsledkov hlasovania ide cez pohľad `public.match_results` (agregované počty hlasov podľa krajiny, žiadne surové riadky ani `voter_hash`) — jediný spôsob, akým appka číta dáta o hlasoch.
 - Žiadne oficiálne logá klubov (`teams.logo_url` je zámerne `null`) — pozri `docs/idea.md` "trademark caution".
 
+## Admin (`/admin`)
+
+Jednoduché admin rozhranie na pridávanie a úpravu líg, tímov a zápasov a na archiváciu zápasov. Prihlásenie cez Supabase Auth (email + heslo).
+
+**Ako si vytvoriť admin účet (raz):**
+1. Supabase dashboard → Authentication → Users → **Add user** → zadaj email a heslo, zaškrtni *Auto Confirm User*.
+2. Supabase dashboard → SQL Editor → spusti (s tvojím emailom):
+   ```sql
+   insert into public.admin_users (user_id)
+   select id from auth.users where email = 'tvoj@email.sk';
+   ```
+3. Otvor `/admin` a prihlás sa.
+
+Odporúčanie: v Supabase → Authentication → Sign In / Providers vypni **Allow new users to sign up** — appka žiadnu registráciu nepotrebuje (aj keby si ju nechal zapnutú, nový účet bez riadku v `admin_users` nemá žiadne práva navyše).
+
+Ako to funguje:
+- `src/proxy.ts` — pri každej `/admin` požiadavke obnoví session cookie (štandardné `@supabase/ssr` nastavenie). Nie je to bezpečnostná kontrola.
+- `src/lib/admin/auth.ts` → `requireAdmin()` — jediná brána: prihlásený používateľ **a** záznam v `admin_users`. Volá ju každá admin stránka aj každá Server Action (`src/app/admin/(panel)/actions.ts`).
+- Databáza to vynucuje znova cez RLS (`is_admin()`), takže aj chyba v app kóde by nedovolila zápis ne-adminovi.
+- Nič sa nemaže: zápas sa **archivuje** (skryje sa z verejnej stránky, zastaví hlasovanie, hlasy ostanú), liga/tím sa **deaktivuje**.
+- Čas výkopu sa zadáva v **UTC** (dôvod v `src/lib/admin/form.ts`).
+
 ## Architektúra appky (stručne)
 
-- `src/app/page.tsx`, `src/app/match/[matchId]/page.tsx` — stránky (server-side, naťahujú zápasy priamo z DB).
-- `src/components/MatchExperience.tsx` — vlastník stavu `selectedMatchId`; drží pohromade sidebar, hlavičku, mapu a zdieľanie bez remountovania mapy pri prepnutí zápasu.
-- `src/components/GlobalMap.tsx` — Mapbox GL inštancia sa vytvorí presne raz; prepnutie zápasu/nové hlasy menia len `feature-state`, nikdy nerecreatujú mapu (pozri komentáre v súbore — toto bolo explicitne krehké miesto v pôvodnom prototype, viď `docs/dev-prompt-chatgpt.md` "IMPORTANT DEVELOPMENT PRINCIPLE").
-- `src/components/MatchRow.tsx`, `src/components/VoteButton.tsx` — výber zápasu (View Map) a hlasovanie (klik na tím) sú zámerne dva úplne oddelené, nijak neprepojené handlery — pozri `docs/dev-prompt-chatgpt.md` "CRITICAL INTERACTION RULES".
-- `src/app/api/votes/route.ts` — jediné miesto, kde appka zisťuje IP adresu a krajinu žiadosti; samotnú validáciu a zápis robí `submit_vote()` v databáze.
+Stránky (`src/app/`, server-side, naťahujú dáta priamo z DB):
+- `/` — landing page: mapa sveta cez celú obrazovku, ktorá sa strieda medzi zápasmi označenými v admine ako **Featured** (`HeroShowcase` + `HeroMap`), veľké zápasy a „ako to funguje“.
+- `/league/[slug]`, `/match/[matchId]` (a `/matches` = všetky ligy, nie je v menu) — obrazovka zápasu (`MatchScreen` → `MatchExperience`). Horná navigácia (`SiteNav`) sa generuje z aktívnych líg v DB, poradie líg je v `LEAGUE_ORDER` v `src/lib/queries.ts`.
+
+Kľúčové komponenty (`src/components/`):
+- `MatchExperience.tsx` — vlastník stavu `selectedMatchId`. Zoznam zápasov, hlavička aj mapa sa pri prepnutí zápasu nikdy neremountujú, menia sa len props.
+- `MatchCard.tsx` — karta zápasu v zozname = **tu sa hlasuje**. Obsahuje tri samostatné, nevnorené tlačidlá: domáci tím, hosťujúci tím (hlas = „tomuto tímu fandím“, nie tip na víťaza) a „View map“ (len výber zápasu, nikdy nehlasuje). Samotná karta nemá žiadny klik. Logika hlasovania je v `src/lib/useVote.ts`. Pozri `docs/dev-prompt-chatgpt.md` „CRITICAL INTERACTION RULES“.
+- `MatchHeader.tsx` — tenká lišta nad mapou, len zobrazuje (počty, percentá, fajka pri tíme, ktorému fandíš).
+- `GlobalMap.tsx` — interaktívna 2D mapa (Mapbox, Mercator). Inštancia sa vytvorí raz; nové výsledky menia len `feature-state`. Sýtosť farby krajiny = sila podpory. Spoločné nastavenia máp sú v `src/lib/mapSetup.ts`, zobrazovacie farby tímov v `src/lib/teamColors.ts`.
+- `ShareBar.tsx` — zdieľanie (X, Facebook, WhatsApp, Reddit, kopírovanie odkazu) dole na mape.
+- `HeroMap.tsx` — dekoratívna mapa na landing page. Kým má zápas málo hlasov, ukazuje **ilustračný** vzor (`src/lib/heroPreview.ts`), ktorý je na stránke tak aj označený.
+- `MapInsights.tsx` — legenda a top krajiny pre každý tím.
+
+Server:
+- `src/app/api/votes/route.ts` — jediné miesto, kde appka zisťuje IP adresu a krajinu žiadosti. Samotnú validáciu a zápis robí `submit_vote()` v databáze.
 
 ## Čo (zámerne) ešte chýba
 
-Pozri `docs/decisions-log.md` pre aktuálny stav. Zhruba: admin rozhranie na pridávanie zápasov (zatiaľ cez SQL/Supabase dashboard), league-tabs filtrovanie na hlavnej stránke, light/system theme (appka je zatiaľ len dark), skutočný realtime (teraz polling každých 15s).
+Pozri `docs/decisions-log.md` pre aktuálny stav. Zhruba: pätička (About/Privacy/Contact), light/system theme (appka je zatiaľ len dark), skutočný realtime (teraz polling každých 15s).

@@ -21,15 +21,21 @@ export function TeamBadge({ team, size = 32 }: { team: Team; size?: number }) {
   }
 
   const initials = team.short_name || team.name.slice(0, 3).toUpperCase();
+  // Dark initials on light team colors (e.g. Real Madrid white, Dortmund
+  // yellow) — white text would disappear there.
+  const n = parseInt(team.primary_color.slice(1), 16);
+  const luminance = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  const textColor = luminance > 0.6 ? "#18181b" : "#ffffff";
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
+      className="flex shrink-0 items-center justify-center rounded-full font-semibold"
       style={{
         width: size,
         height: size,
         fontSize: size * 0.32,
         backgroundColor: team.primary_color,
+        color: textColor,
         border: `2px solid ${team.secondary_color}`,
       }}
       aria-hidden="true"
