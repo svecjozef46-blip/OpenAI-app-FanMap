@@ -139,8 +139,8 @@ grant execute on function public.submit_vote(uuid, uuid, text, text) to anon, au
 -- ROW LEVEL SECURITY --------------------------------------------------------
 -- Public (anon/authenticated) gets read-only access to active content, and
 -- NO direct write access anywhere. Writes to leagues/teams/matches happen
--- via an authenticated admin path (not built yet — dev-prompt-chatgpt.md
--- Phase 7); votes are written only through submit_vote() above. A public
+-- only for admins (see ADMIN below — /admin in the app); votes are written
+-- only through submit_vote() above. A public
 -- INSERT policy on votes would let anyone bypass the one-vote-per-device
 -- rule by calling the API directly with a fresh voter_hash.
 alter table public.leagues enable row level security;
@@ -172,6 +172,63 @@ create policy "public can submit feedback"
 -- No policies at all on votes for anon/authenticated: direct reads and
 -- writes are both denied. Reading aggregated results goes through the
 -- match_results view below instead.
+
+-- ADMIN ---------------------------------------------------------------------
+-- Admins sign in with Supabase Auth (email + password) at /admin. Signing in
+-- alone grants nothing: the user must also have a row in admin_users,
+-- which is added by hand (SQL editor / dashboard) — there's no self-service
+-- path. Grant admin to an existing Auth user with:
+--   insert into public.admin_users (user_id)
+--   select id from auth.users where email = 'you@example.com';
+create table public.admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.admin_users enable row level security;
+-- No policies and no table grants: invisible to the API entirely. Only
+-- is_admin() (SECURITY DEFINER) reads it.
+revoke all on table public.admin_users from anon, authenticated;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.admin_users where user_id = auth.uid());
+$$;
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to authenticated;
+
+-- Admins read everything (incl. inactive/archived) and insert/update.
+-- These are added on top of the public SELECT policies above (Postgres
+-- ORs permissive policies). No DELETE policies on purpose: matches are
+-- archived (status = 'archived'), leagues/teams are deactivated
+-- (is_active = false) — a delete would cascade into votes.
+create policy "admins can read all leagues" on public.leagues
+  for select to authenticated using (public.is_admin());
+create policy "admins can insert leagues" on public.leagues
+  for insert to authenticated with check (public.is_admin());
+create policy "admins can update leagues" on public.leagues
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+create policy "admins can read all teams" on public.teams
+  for select to authenticated using (public.is_admin());
+create policy "admins can insert teams" on public.teams
+  for insert to authenticated with check (public.is_admin());
+create policy "admins can update teams" on public.teams
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+create policy "admins can read all matches" on public.matches
+  for select to authenticated using (public.is_admin());
+create policy "admins can insert matches" on public.matches
+  for insert to authenticated with check (public.is_admin());
+create policy "admins can update matches" on public.matches
+  for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+create policy "admins can read feedback" on public.feedback
+  for select to authenticated using (public.is_admin());
 
 -- AGGREGATED RESULTS VIEW ----------------------------------------------------
 -- Exposes vote counts per match/team/country without exposing individual
