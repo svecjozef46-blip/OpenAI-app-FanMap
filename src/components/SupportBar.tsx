@@ -22,7 +22,7 @@ export function SupportBar({
 
   return (
     <div
-      className="flex w-full overflow-hidden rounded-full bg-white/[0.06]"
+      className="flex w-full overflow-hidden rounded-full bg-fg/[0.07]"
       style={{ height, gap: showGap ? 2 : 0 }}
       role="img"
       aria-label={isEmpty ? "No votes yet" : `${homePct}% to ${awayPct}%`}

@@ -1,24 +1,31 @@
+import type { Theme } from "@/lib/theme";
 import type { MatchWithTeams, Team } from "@/lib/types";
 
-// The colors a match is DISPLAYED in (map, bar, legend, header), derived
-// from the teams' official colors in the database. Two problems this solves:
+// The colors a match is DISPLAYED in (map, bars, legend), derived from the
+// teams' official colors in the database. It solves three problems:
 //
-// 1. Dark team colors (e.g. PSG navy #004170) are nearly invisible on the
-//    dark map. They're lifted to a minimum lightness, keeping their hue —
-//    still recognisably "the team's color", just readable.
-// 2. Two teams with similar colors (PSG vs Marseille: both blue) would be
-//    indistinguishable. Then the away team uses its secondary color instead.
+// 1. Colors that vanish against the map. Dark mode: navy or black kits on a
+//    near-black map. Light mode: white or yellow kits on a near-white map.
+//    Each color is nudged (same hue) until its brightness sits in a band
+//    that reads well in the current mode.
+// 2. Kits that ARE the background color. A black kit in dark mode (Juventus)
+//    or a white one in light mode (Real Madrid) uses the team's secondary
+//    color instead of becoming an anonymous grey.
+// 3. Two teams with similar colors (PSG vs Marseille: both blue). The away
+//    team then uses its other color.
 //
-// Deterministic: the same match always gets the same colors, and a team's
-// stored colors are never changed.
+// Deterministic: the same match always gets the same colors in a given
+// mode, and a team's stored colors are never changed.
 
 type Hsl = { h: number; s: number; l: number };
 
-function hexToHsl(hex: string): Hsl {
+function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
-  const r = ((n >> 16) & 255) / 255;
-  const g = ((n >> 8) & 255) / 255;
-  const b = (n & 255) / 255;
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+function hexToHsl(hex: string): Hsl {
+  const [r, g, b] = hexToRgb(hex);
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const l = (max + min) / 2;
@@ -53,17 +60,39 @@ function hslToHex({ h, s, l }: Hsl): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-const MIN_LIGHTNESS = 0.5;
-// Pure white fills look harsh on the dark map; cap at a soft light grey.
-const MAX_LIGHTNESS = 0.84;
+// Perceived brightness, 0 (black) to 1 (white) — WCAG relative luminance.
+// Unlike HSL lightness it knows that yellow is bright and blue is dark.
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
 
-// Keep colors in a range that reads well on the dark map: lift too-dark
-// ones, soften too-bright ones (white kits).
-function visible(hex: string): string {
+// Brightness band a display color must sit in, per mode.
+const BAND: Record<Theme, { min: number; max: number }> = {
+  dark: { min: 0.11, max: 0.72 },
+  light: { min: 0, max: 0.34 },
+};
+
+// Moves a color's lightness (keeping hue and saturation) until its
+// brightness is inside the band for this mode.
+function fitToBand(hex: string, theme: Theme): string {
+  const { min, max } = BAND[theme];
   const hsl = hexToHsl(hex);
-  if (hsl.l < MIN_LIGHTNESS) return hslToHex({ ...hsl, l: MIN_LIGHTNESS });
-  if (hsl.l > MAX_LIGHTNESS) return hslToHex({ ...hsl, l: MAX_LIGHTNESS });
-  return hex.toLowerCase();
+  let out = hex.toLowerCase();
+  for (let i = 0; i < 60; i++) {
+    const lum = luminance(out);
+    if (lum < min) hsl.l = Math.min(hsl.l + 0.015, 1);
+    else if (lum > max) hsl.l = Math.max(hsl.l - 0.015, 0);
+    else break;
+    out = hslToHex(hsl);
+  }
+  return out;
+}
+
+// True when a kit color would be (nearly) the map's own background.
+function matchesBackground(hex: string, theme: Theme): boolean {
+  const lum = luminance(hex);
+  return theme === "dark" ? lum < 0.03 : lum > 0.8;
 }
 
 // Rough "do these look alike" check: close hue (for saturated colors) and
@@ -72,23 +101,26 @@ function tooSimilar(a: string, b: string): boolean {
   const x = hexToHsl(a);
   const y = hexToHsl(b);
   const hueDiff = Math.min(Math.abs(x.h - y.h), 1 - Math.abs(x.h - y.h)) * 360;
-  const bothGreyish = x.s < 0.2 && y.s < 0.2;
-  if (bothGreyish) return Math.abs(x.l - y.l) < 0.25;
+  const xGrey = x.s < 0.2;
+  const yGrey = y.s < 0.2;
+  if (xGrey || yGrey) return xGrey && yGrey && Math.abs(x.l - y.l) < 0.25;
   return hueDiff < 28 && Math.abs(x.l - y.l) < 0.3;
+}
+
+// A team's two display candidates for this mode: preferred first.
+function candidates(team: Team, theme: Theme): [string, string] {
+  const primary = fitToBand(team.primary_color, theme);
+  const secondary = fitToBand(team.secondary_color, theme);
+  return matchesBackground(team.primary_color, theme) && !matchesBackground(team.secondary_color, theme)
+    ? [secondary, primary]
+    : [primary, secondary];
 }
 
 export type MatchColors = { home: string; away: string };
 
-export function teamDisplayColor(team: Team): string {
-  return visible(team.primary_color);
-}
-
-export function getMatchColors(match: MatchWithTeams): MatchColors {
-  const home = visible(match.home_team.primary_color);
-  let away = visible(match.away_team.primary_color);
-  if (tooSimilar(home, away)) {
-    const alternative = visible(match.away_team.secondary_color);
-    if (!tooSimilar(home, alternative)) away = alternative;
-  }
+export function getMatchColors(match: MatchWithTeams, theme: Theme): MatchColors {
+  const [home] = candidates(match.home_team, theme);
+  const [awayFirst, awaySecond] = candidates(match.away_team, theme);
+  const away = tooSimilar(home, awayFirst) && !tooSimilar(home, awaySecond) ? awaySecond : awayFirst;
   return { home, away };
 }

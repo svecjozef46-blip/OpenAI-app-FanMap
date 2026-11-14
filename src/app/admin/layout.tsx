@@ -15,6 +15,10 @@ export const metadata: Metadata = {
 // The root layout locks the body to the viewport (overflow-hidden) for the
 // full-screen map. Admin pages are normal long pages, so they get their own
 // scroll container.
+//
+// The admin is always dark (`[color-scheme:dark]` + fixed colors): it's an
+// internal tool styled with plain Tailwind greys, and keeping it out of the
+// light/dark tokens means the public design can change without touching it.
 export default function AdminRootLayout({ children }: LayoutProps<"/admin">) {
-  return <div className="h-full overflow-y-auto">{children}</div>;
+  return <div className="h-full overflow-y-auto bg-zinc-950 text-zinc-100 [color-scheme:dark]">{children}</div>;
 }

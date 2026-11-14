@@ -1,19 +1,66 @@
 @import "tailwindcss";
 
+/* DESIGN TOKENS -----------------------------------------------------------
+   Every color in the public UI comes from the semantic tokens below (bg,
+   surface, fg, muted, …) instead of fixed Tailwind colors, so light and dark
+   mode are one definition each, in one place.
+
+   light-dark(LIGHT, DARK) picks a value from the element's `color-scheme`:
+   - default: follows the visitor's device setting,
+   - <html data-theme="light|dark">: the visitor's explicit choice (set by
+     the toggle, see lib/theme.ts; applied before first paint by the inline
+     script in app/layout.tsx).
+   Because it follows `color-scheme`, any subtree can be forced to one mode
+   with a `[color-scheme:dark]` class (the admin area does this). */
+:root {
+  color-scheme: light dark;
+
+  --bg: light-dark(#ffffff, #000000); /* page; the map's oceans are see-through to this */
+  --surface: light-dark(#f5f5f7, #121214); /* cards, tiles */
+  --raised: light-dark(#ececf0, #1c1c1e); /* hover / selected surfaces */
+  --line: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1)); /* hairlines */
+  --fg: light-dark(#1d1d1f, #f5f5f7); /* primary text */
+  --muted: light-dark(#6e6e73, #a1a1a6); /* secondary text (passes 4.5:1 on bg and surface) */
+  --faint: light-dark(#a1a1a6, #6e6e73); /* decorative only: separators, "vs" */
+  --accent: light-dark(#047857, #34d399); /* brand green: "your team", success */
+  --warn: light-dark(#b45309, #fbbf24);
+  --danger: light-dark(#c81e1e, #ff6961);
+  --glass: light-dark(rgba(255, 255, 255, 0.78), rgba(18, 18, 20, 0.72)); /* floating panels over the map */
+  --shadow-float-value: 0 12px 40px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.6));
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-archivo);
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-glass: var(--glass);
+
+  --shadow-float: var(--shadow-float-value);
 }
 
-/* Dark-only app (see layout.tsx for why); background/text color live
-   directly on <body> via Tailwind classes there instead of CSS variables
-   here, since there's no light variant to switch between right now. */
 body {
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
-/* Horizontal scrollers (league tabs, mobile match strip) without a visible
-   scrollbar — they're still scrollable by touch, trackpad and keyboard. */
+/* Horizontal scrollers (league tabs, share bar) without a visible
+   scrollbar — still scrollable by touch, trackpad and keyboard. */
 .no-scrollbar {
   scrollbar-width: none;
 }
@@ -21,39 +68,85 @@ body {
   display: none;
 }
 
-/* Keeps the Mapbox attribution/logo readable against the dark-v11 style
-   without fighting Mapbox's own CSS specificity everywhere else. */
-.mapboxgl-ctrl-logo {
-  opacity: 0.6;
+/* Sections on the home page ease in as they scroll into view. Pure CSS
+   (scroll-driven animation): browsers without support, and visitors who
+   asked for reduced motion, simply see the content as-is. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 55%;
+    }
+  }
 }
-.mapboxgl-ctrl-attrib {
-  background: rgba(9, 9, 11, 0.6) !important;
-}
-.mapboxgl-ctrl-attrib a {
-  color: #a1a1aa !important;
-}
-.mapboxgl-ctrl-group {
-  background: rgba(24, 24, 27, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-.mapboxgl-ctrl-group button + button {
-  border-top-color: rgba(255, 255, 255, 0.1) !important;
-}
-.mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
-  filter: invert(1) opacity(0.75);
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-/* Country tooltip on the match map (GlobalMap.tsx). Dark glass card that
-   matches the rest of the UI instead of Mapbox's default white bubble. */
+/* Gentle fade-in used by the hero's match caption (HeroShowcase.tsx). */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* MAPBOX CHROME -------------------------------------------------------------
+   Restyles Mapbox's own controls to match the UI in both modes. */
+.mapboxgl-map {
+  font-family: inherit;
+}
+.mapboxgl-ctrl-logo {
+  opacity: 0.55;
+}
+.mapboxgl-ctrl-attrib {
+  background: transparent !important;
+  color: var(--muted);
+}
+.mapboxgl-ctrl-attrib a {
+  color: var(--muted) !important;
+}
+.mapboxgl-ctrl-group {
+  background: var(--glass) !important;
+  border: 1px solid var(--line);
+  box-shadow: none !important;
+  backdrop-filter: blur(16px);
+}
+.mapboxgl-ctrl-group button + button {
+  border-top-color: var(--line) !important;
+}
+/* Mapbox's +/- icons are black; flip them to white in dark mode. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+    filter: invert(1);
+  }
+}
+:root[data-theme="dark"] .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  filter: invert(1);
+}
+
+/* Country tooltip on the match map (GlobalMap.tsx). */
 .fanmap-popup .mapboxgl-popup-content {
-  background: rgba(24, 24, 27, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 14px;
   padding: 10px 12px;
-  color: #e4e4e7;
+  color: var(--fg);
   font: 12px/1.5 var(--font-sans), system-ui, sans-serif;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-float-value);
+  backdrop-filter: blur(16px);
   min-width: 140px;
 }
 .fanmap-popup .mapboxgl-popup-tip {
@@ -62,7 +155,6 @@ body {
 .fanmap-popup__title {
   font-weight: 600;
   font-size: 13px;
-  color: #fafafa;
   margin-bottom: 4px;
 }
 .fanmap-popup__row {
@@ -81,18 +173,6 @@ body {
   display: inline-block;
 }
 .fanmap-popup__muted {
-  color: #a1a1aa;
+  color: var(--muted);
   margin-top: 2px;
-}
-
-/* Gentle fade-in used by the landing-page match chip (HeroShowcase.tsx). */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }

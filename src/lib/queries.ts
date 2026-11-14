@@ -43,7 +43,15 @@ export async function getVisibleMatches(leagueId?: string): Promise<MatchWithTea
     console.error("Failed to load matches:", error);
     return [];
   }
-  return (data ?? []).map((row) => normalizeMatch(row as unknown as RawMatchRow));
+  const matches = (data ?? []).map((row) => normalizeMatch(row as unknown as RawMatchRow));
+  // What people can still vote on comes first: live, then upcoming (soonest
+  // first), then finished matches (most recent first).
+  const rank = (m: MatchWithTeams) => (m.status === "live" ? 0 : m.status === "upcoming" ? 1 : 2);
+  return matches.sort((x, y) => {
+    if (rank(x) !== rank(y)) return rank(x) - rank(y);
+    const diff = new Date(x.kickoff_at).getTime() - new Date(y.kickoff_at).getTime();
+    return rank(x) === 2 ? -diff : diff;
+  });
 }
 
 // Order of the league tabs in the top navigation: the big five domestic

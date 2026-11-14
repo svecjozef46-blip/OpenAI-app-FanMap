@@ -83,8 +83,8 @@ export function MatchExperience({
   const list = (
     <>
       <div className="flex items-baseline justify-between px-1 pb-2">
-        <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
-        <span className="text-xs text-zinc-500">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="text-xs text-muted">
           {matches.length} {matches.length === 1 ? "match" : "matches"}
         </span>
       </div>
@@ -110,7 +110,7 @@ export function MatchExperience({
       {sidebarOpen && (
         <nav
           aria-label="Matches"
-          className="hidden w-80 shrink-0 overflow-y-auto border-r border-white/[0.06] bg-zinc-950 p-3 md:block"
+          className="hidden w-80 shrink-0 overflow-y-auto border-r border-line bg-bg p-3 md:block"
         >
           {list}
         </nav>
@@ -122,7 +122,7 @@ export function MatchExperience({
             <button
               type="button"
               onClick={() => setSidebarOpen((open) => !open)}
-              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-zinc-950/75 text-zinc-400 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl hover:text-white md:flex"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-glass text-muted shadow-float backdrop-blur-xl transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent md:flex"
               aria-label={sidebarOpen ? "Hide match list" : "Show match list"}
               aria-expanded={sidebarOpen}
             >
@@ -137,7 +137,9 @@ export function MatchExperience({
           </div>
         </div>
 
-        <div className="relative h-[58vh] min-h-[320px] md:absolute md:inset-0 md:h-auto">
+        {/* Phones: only as tall as the whole world is at this width — a taller
+            box would make Mapbox zoom in and crop the continents. */}
+        <div className="relative h-[calc(52vw+16px)] md:absolute md:inset-0 md:h-auto">
           <GlobalMap match={selectedMatch} results={results} />
           {/* Bottom overlay (desktop): insights on the left, share bar centred
               under the map (roughly below Africa on the world view). Kept
@@ -159,7 +161,7 @@ export function MatchExperience({
       </section>
 
       {/* Mobile match list (below the map) */}
-      <nav aria-label="Matches" className="border-t border-white/[0.06] p-3 md:hidden">
+      <nav aria-label="Matches" className="border-t border-line p-3 md:hidden">
         {list}
       </nav>
     </div>

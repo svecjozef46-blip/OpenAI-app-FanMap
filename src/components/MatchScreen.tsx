@@ -33,13 +33,13 @@ export function MatchScreen({
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <p className="text-lg font-semibold text-zinc-100">No matches in {title} yet</p>
-            <p className="max-w-sm text-sm text-zinc-400">
+            <p className="text-2xl font-semibold tracking-tight">No matches in {title} yet</p>
+            <p className="max-w-sm text-muted">
               New fixtures are added regularly. Meanwhile, see what&apos;s on in other competitions.
             </p>
             <Link
               href="/matches"
-              className="mt-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-400"
+              className="mt-3 rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-bg transition-opacity hover:opacity-85"
             >
               Browse all matches
             </Link>

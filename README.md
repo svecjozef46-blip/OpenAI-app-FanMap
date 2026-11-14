@@ -39,6 +39,16 @@ Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decision
 - Čítanie výsledkov hlasovania ide cez pohľad `public.match_results` (agregované počty hlasov podľa krajiny, žiadne surové riadky ani `voter_hash`) — jediný spôsob, akým appka číta dáta o hlasoch.
 - Žiadne oficiálne logá klubov (`teams.logo_url` je zámerne `null`) — pozri `docs/idea.md` "trademark caution".
 
+## Vzhľad: svetlý a tmavý režim
+
+- Predvolene sa appka riadi nastavením zariadenia. Prepínač je v hornej lište, voľba Auto / Light / Dark v pätičke (`src/components/ThemeToggle.tsx`, logika v `src/lib/theme.ts`).
+- Všetky farby verejnej časti sú **tokeny** v `src/app/globals.css` (`bg`, `surface`, `fg`, `muted`, `accent`…), každý má svetlú aj tmavú hodnotu na jednom mieste. V komponentoch sa používajú triedy ako `bg-surface`, `text-muted`, nie pevné farby.
+- Mapa nemá vlastné pozadie (oceány sú priehľadné), takže splýva so stránkou v oboch režimoch. Farby pevniny a hraníc sú v `MAP_PALETTE` v `src/lib/mapSetup.ts`.
+- Farby tímov na mape a v pruhoch sa prispôsobujú režimu (`src/lib/teamColors.ts`).
+- Nadpisy používajú písmo Archivo (`font-display`), ostatný text Geist.
+- Admin je vždy tmavý a tokeny nepoužíva.
+- Odkazy na vlastné sociálne siete v pätičke sa zobrazia po vyplnení `NEXT_PUBLIC_INSTAGRAM_URL` a pod. v `.env.local` (pozri `.env.example`).
+
 ## Admin (`/admin`)
 
 Jednoduché admin rozhranie na pridávanie a úpravu líg, tímov a zápasov a na archiváciu zápasov. Prihlásenie cez Supabase Auth (email + heslo).
@@ -71,7 +81,7 @@ Kľúčové komponenty (`src/components/`):
 - `MatchExperience.tsx` — vlastník stavu `selectedMatchId`. Zoznam zápasov, hlavička aj mapa sa pri prepnutí zápasu nikdy neremountujú, menia sa len props.
 - `MatchCard.tsx` — karta zápasu v zozname = **tu sa hlasuje**. Obsahuje tri samostatné, nevnorené tlačidlá: domáci tím, hosťujúci tím (hlas = „tomuto tímu fandím“, nie tip na víťaza) a „View map“ (len výber zápasu, nikdy nehlasuje). Samotná karta nemá žiadny klik. Logika hlasovania je v `src/lib/useVote.ts`. Pozri `docs/dev-prompt-chatgpt.md` „CRITICAL INTERACTION RULES“.
 - `MatchHeader.tsx` — tenká lišta nad mapou, len zobrazuje (počty, percentá, fajka pri tíme, ktorému fandíš).
-- `GlobalMap.tsx` — interaktívna 2D mapa (Mapbox, Mercator). Inštancia sa vytvorí raz; nové výsledky menia len `feature-state`. Sýtosť farby krajiny = sila podpory. Spoločné nastavenia máp sú v `src/lib/mapSetup.ts`, zobrazovacie farby tímov v `src/lib/teamColors.ts`.
+- `GlobalMap.tsx` — interaktívna 2D mapa (Mapbox, Mercator, bez Antarktídy). Inštancia sa vytvorí raz; nové výsledky menia len `feature-state`. Sýtosť farby krajiny = sila podpory. Spoločné nastavenia máp sú v `src/lib/mapSetup.ts`, zobrazovacie farby tímov v `src/lib/teamColors.ts`.
 - `ShareBar.tsx` — zdieľanie (X, Facebook, WhatsApp, Reddit, kopírovanie odkazu) dole na mape.
 - `HeroMap.tsx` — dekoratívna mapa na landing page. Kým má zápas málo hlasov, ukazuje **ilustračný** vzor (`src/lib/heroPreview.ts`), ktorý je na stránke tak aj označený.
 - `MapInsights.tsx` — legenda a top krajiny pre každý tím.
@@ -81,4 +91,4 @@ Server:
 
 ## Čo (zámerne) ešte chýba
 
-Pozri `docs/decisions-log.md` pre aktuálny stav. Zhruba: pätička (About/Privacy/Contact), light/system theme (appka je zatiaľ len dark), skutočný realtime (teraz polling každých 15s).
+Pozri `docs/decisions-log.md` pre aktuálny stav. Zhruba: stránky About/Privacy/Contact, vertikálne video pre sociálne siete, skutočný realtime (teraz polling každých 15s).

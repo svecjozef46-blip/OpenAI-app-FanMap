@@ -1,31 +1,95 @@
 import type mapboxgl from "mapbox-gl";
+import type { Theme } from "@/lib/theme";
 
 // Shared Mapbox setup used by both maps in the app: the interactive match
-// map (components/GlobalMap.tsx) and the decorative landing-page map
+// map (components/GlobalMap.tsx) and the decorative home-page map
 // (components/HeroMap.tsx). Kept in one place so both always look the same.
+//
+// The look: a flat, minimal world. Every layer of the Mapbox base style is
+// hidden (roads, terrain, water, its own borders), so the oceans are
+// transparent and the page background shows through — the map blends into
+// the page in light and dark mode with no visible edge. Land, borders and
+// team colors are our own layers, drawn from one country-boundaries tileset.
 
 export const COUNTRY_SOURCE_ID = "country-boundaries";
 export const COUNTRY_SOURCE_LAYER = "country_boundaries";
+export const LAND_LAYER_ID = "country-land";
 export const FILL_LAYER_ID = "country-fills";
-export const HOVER_LAYER_ID = "country-hover";
 export const BORDER_LAYER_ID = "country-borders";
+export const HOVER_LAYER_ID = "country-hover";
+const LABEL_LAYER_ID = "country-label"; // from the Mapbox base style
 
 // Mapbox's maintained country-boundaries tileset. `iso_3166_1` (ISO alpha-2,
 // e.g. "SK") is promoted as the feature id — the same format
 // votes.country_code uses, so vote data maps onto countries directly.
 export const COUNTRY_TILESET_URL = "mapbox://mapbox.country-boundaries-v1";
 
+// Only used for its country-name labels and fonts; everything else in it is
+// hidden (see tidyBaseStyle).
 export const MAP_STYLE = "mapbox://styles/mapbox/dark-v11";
 
-// Flat (Mercator) world, not the 3D globe Mapbox v3 shows by default at
-// low zoom — the whole point of the product is seeing every country at
-// once. Latitudes are trimmed (no Antarctica, little Arctic) so the
-// inhabited world fills the frame instead of vast empty poles.
+// Flat (Mercator) world, not the 3D globe Mapbox v3 shows by default at low
+// zoom — the whole point of the product is seeing every country at once.
+//
+// Mercator is the world people know from Google Maps, weather sites and TV
+// graphics. It does inflate the far north (Canada, Russia, Greenland), and
+// two alternatives were tried on 2026-11-14 and rejected by the product
+// owner: Equal Earth (true areas, but a curved, squashed outline) and
+// equirectangular (straight, but flattened). Familiar beat accurate here.
 export const PROJECTION = "mercator";
+
+// Rough starting view; fitWorld() below does the exact framing.
 export const WORLD_BOUNDS: [[number, number], [number, number]] = [
   [-168, -56],
   [190, 75],
 ];
+
+// Outermost points [lng, lat] that must stay in view. West edge: Alaska.
+// East edge: longitude 190 rather than 180, so Russia's eastern tip stays
+// attached to Russia instead of being cut off and shown beside Alaska.
+// North: capped at 75° (Mercator stretches the empty Arctic enormously).
+// South: Tierra del Fuego. Antarctica is left out entirely (also filtered
+// from the layers, see WORLDVIEW_FILTER): it has no fans, and in Mercator it
+// would take a large part of the frame.
+const WORLD_EXTREMES: Array<[number, number]> = [
+  [-168, 60],
+  [190, 60],
+  [0, 75],
+  [-68, -55.6],
+];
+
+export type MapPadding = { top: number; bottom: number; left: number; right: number };
+
+// Frames the whole inhabited world inside the map container, minus
+// `padding` (space reserved for panels floating over the map). Mapbox's own
+// fitBounds() would do for Mercator, but it only looks at the corners of a
+// lng/lat box and breaks for any other projection. This measures where the
+// outermost points actually land on screen and adjusts zoom and position to
+// fit, so the projection can be changed in one line (PROJECTION above).
+export function fitWorld(map: mapboxgl.Map, padding: MapPadding) {
+  const container = map.getContainer();
+  const availableWidth = container.clientWidth - padding.left - padding.right;
+  const availableHeight = container.clientHeight - padding.top - padding.bottom;
+  if (availableWidth <= 0 || availableHeight <= 0) return;
+
+  const measure = () => {
+    const points = WORLD_EXTREMES.map((lngLat) => map.project(lngLat));
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  };
+
+  // 1. Zoom so the world's on-screen size matches the available space.
+  let box = measure();
+  const scale = Math.min(availableWidth / (box.maxX - box.minX), availableHeight / (box.maxY - box.minY));
+  map.jumpTo({ zoom: map.getZoom() + Math.log2(scale) });
+
+  // 2. Slide it so it sits centred in that space.
+  box = measure();
+  const offsetX = (box.minX + box.maxX) / 2 - (padding.left + availableWidth / 2);
+  const offsetY = (box.minY + box.maxY) / 2 - (padding.top + availableHeight / 2);
+  map.panBy([offsetX, offsetY], { animate: false });
+}
 
 // The tileset contains several overlapping versions of disputed borders
 // (one per "worldview"). Without this filter some countries are drawn
@@ -33,47 +97,140 @@ export const WORLD_BOUNDS: [[number, number], [number, number]] = [
 export const WORLDVIEW_FILTER: mapboxgl.FilterSpecification = [
   "all",
   ["==", ["get", "disputed"], "false"],
+  ["!=", ["get", "iso_3166_1"], "AQ"], // no Antarctica
   ["any", ["==", "all", ["get", "worldview"]], ["in", "US", ["get", "worldview"]]],
 ];
 
-// Hides the dark-v11 style's ocean/place/road labels so team colors are
-// the focus, keeping only country names (dimmed). Returns the id of the
-// first remaining label layer so our fills can be inserted underneath it
-// (labels stay readable on top of colored countries).
+// Map colors per mode. `border` equals the page background, so countries
+// look like separate tiles with a hairline gap between them.
+type MapPalette = {
+  land: string;
+  border: string;
+  label: string;
+  labelHalo: string;
+  hover: string;
+  undecided: string; // countries with a few votes but no clear leader yet
+};
+export const MAP_PALETTE: Record<Theme, MapPalette> = {
+  dark: {
+    land: "#222226",
+    border: "#000000",
+    label: "#a1a1a6",
+    labelHalo: "rgba(0,0,0,0.6)",
+    hover: "#ffffff",
+    undecided: "#636366",
+  },
+  light: {
+    land: "#d6d6dc",
+    border: "#ffffff",
+    label: "#6e6e73",
+    labelHalo: "rgba(255,255,255,0.7)",
+    hover: "#1d1d1f",
+    undecided: "#9c9ca3",
+  },
+};
+
+// Hides every layer of the base style (see file comment), keeping only the
+// country-name labels when asked. Returns the label layer's id so our
+// layers can be inserted underneath it.
 export function tidyBaseStyle(map: mapboxgl.Map, { keepCountryLabels }: { keepCountryLabels: boolean }) {
-  let firstLabelLayerId: string | undefined;
+  let labelLayerId: string | undefined;
   for (const layer of map.getStyle()?.layers ?? []) {
-    if (layer.type !== "symbol") continue;
-    if (keepCountryLabels && layer.id === "country-label") {
-      map.setPaintProperty(layer.id, "text-opacity", 0.55);
-      firstLabelLayerId ??= layer.id;
+    if (keepCountryLabels && layer.id === LABEL_LAYER_ID) {
+      labelLayerId = layer.id;
     } else {
       map.setLayoutProperty(layer.id, "visibility", "none");
     }
   }
-  return firstLabelLayerId;
+  // The base style's atmosphere would tint the transparent background.
+  map.setFog(null);
+  return labelLayerId;
 }
 
-// Thin country borders. The dark base style's land and water are very
-// close in color; without these, uncolored countries blend into the ocean.
-// A colored country gets a brighter border in its team color (feature-state
-// `lineColor`), which gives the map its crisp, "lit up" look.
-export function addCountryBorders(map: mapboxgl.Map, beforeId: string | undefined) {
+// Adds our layers, bottom to top: land, team-color fills, borders and
+// (interactive map only) the hover outline. Colors come from
+// applyMapPalette(); per-country team colors from feature-state
+// (`fillColor`, `lineColor`, `opacity`, `hover`), set by the map components.
+export function addCountryLayers(
+  map: mapboxgl.Map,
+  { beforeId, withHover }: { beforeId: string | undefined; withHover: boolean }
+) {
+  map.addSource(COUNTRY_SOURCE_ID, {
+    type: "vector",
+    url: COUNTRY_TILESET_URL,
+    promoteId: "iso_3166_1",
+  });
+
+  const common = {
+    source: COUNTRY_SOURCE_ID,
+    "source-layer": COUNTRY_SOURCE_LAYER,
+    filter: WORLDVIEW_FILTER,
+  } as const;
+
+  map.addLayer({ id: LAND_LAYER_ID, type: "fill", ...common, paint: { "fill-color": "#1c1c1e" } }, beforeId);
+
   map.addLayer(
     {
-      id: BORDER_LAYER_ID,
-      type: "line",
-      source: COUNTRY_SOURCE_ID,
-      "source-layer": COUNTRY_SOURCE_LAYER,
-      filter: WORLDVIEW_FILTER,
+      id: FILL_LAYER_ID,
+      type: "fill",
+      ...common,
       paint: {
-        "line-color": ["coalesce", ["feature-state", "lineColor"], "#52525b"],
-        "line-width": ["case", ["!=", ["feature-state", "lineColor"], null], 0.9, 0.6],
-        "line-opacity": ["case", ["!=", ["feature-state", "lineColor"], null], 0.95, 0.8],
+        "fill-color": ["coalesce", ["feature-state", "fillColor"], "#000000"],
+        // No votes → fully transparent (plain land shows). Hovering
+        // brightens a colored country a little.
+        "fill-opacity": [
+          "*",
+          ["coalesce", ["feature-state", "opacity"], 0],
+          ["case", ["boolean", ["feature-state", "hover"], false], 1.15, 1],
+        ],
       },
     },
     beforeId
   );
+
+  map.addLayer(
+    {
+      id: BORDER_LAYER_ID,
+      type: "line",
+      ...common,
+      paint: { "line-color": "#000000", "line-width": 0.7 },
+    },
+    beforeId
+  );
+
+  if (withHover) {
+    map.addLayer(
+      {
+        id: HOVER_LAYER_ID,
+        type: "line",
+        ...common,
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 1.4,
+          "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.9, 0],
+        },
+      },
+      beforeId
+    );
+  }
+}
+
+// Applies the light or dark palette to the layers above. Called once after
+// the layers are added and again whenever the visitor switches mode — the
+// map itself is never recreated for a mode change.
+export function applyMapPalette(map: mapboxgl.Map, theme: Theme) {
+  const palette = MAP_PALETTE[theme];
+  map.setPaintProperty(LAND_LAYER_ID, "fill-color", palette.land);
+  // A colored country gets a border in its team color (feature-state
+  // `lineColor`), which gives the map its crisp, "lit up" look.
+  map.setPaintProperty(BORDER_LAYER_ID, "line-color", ["coalesce", ["feature-state", "lineColor"], palette.border]);
+  if (map.getLayer(HOVER_LAYER_ID)) {
+    map.setPaintProperty(HOVER_LAYER_ID, "line-color", palette.hover);
+  }
+  if (map.getLayer(LABEL_LAYER_ID)) {
+    map.setPaintProperty(LABEL_LAYER_ID, "text-color", palette.label);
+    map.setPaintProperty(LABEL_LAYER_ID, "text-halo-color", palette.labelHalo);
+  }
 }
 
 export function getMapboxToken(): string | null {
@@ -85,9 +242,7 @@ export function getMapboxToken(): string | null {
   return token;
 }
 
-// Converts "#RRGGBB" to rgba() — Mapbox's feature-state colors can't take
-// a separate alpha, and we want hover/strength handled via fill-opacity
-// anyway, so this is only used for UI glows.
+// "#RRGGBB" → rgba(), for soft team-color tints in the UI.
 export function hexToRgba(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;

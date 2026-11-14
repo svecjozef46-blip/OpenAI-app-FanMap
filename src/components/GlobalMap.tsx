@@ -6,26 +6,27 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import type { CountryResult, MatchWithTeams } from "@/lib/types";
 import { countryName, splitPercent } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
+import { useTheme } from "@/lib/theme";
 import {
   COUNTRY_SOURCE_ID,
   COUNTRY_SOURCE_LAYER,
-  COUNTRY_TILESET_URL,
   FILL_LAYER_ID,
-  HOVER_LAYER_ID,
+  MAP_PALETTE,
   MAP_STYLE,
   PROJECTION,
-  WORLDVIEW_FILTER,
   WORLD_BOUNDS,
-  addCountryBorders,
+  addCountryLayers,
+  applyMapPalette,
+  fitWorld,
   getMapboxToken,
   tidyBaseStyle,
 } from "@/lib/mapSetup";
 
 // Countries with some votes, but not enough to call (see MIN_VOTES_TO_COLOR
-// in lib/results.ts) or a tie: shown in a quiet grey so people can see
-// "there's activity here" without the map claiming a winner.
-const UNDECIDED_COLOR = "#71717a";
-const UNDECIDED_OPACITY = 0.35;
+// in lib/results.ts) or a tie: shown in a quiet grey (MAP_PALETTE.undecided)
+// so people can see "there's activity here" without the map claiming a
+// winner.
+const UNDECIDED_OPACITY = 0.55;
 
 // Fill opacity for a decided country scales with how clear the lead is:
 // 51% → faint, 100% → strong. Makes the map more honest (a 51/49 country
@@ -37,7 +38,8 @@ function opacityForShare(leaderShare: number): number {
 // Per dev-prompt-chatgpt.md "MAP MATCH SWITCHING": the Mapbox instance is
 // created exactly once (mount effect below). Match switches and new votes
 // only call setFeatureState — the map, source and layers are never
-// recreated, which is what prevents flicker when switching matches.
+// recreated, which is what prevents flicker when switching matches. The
+// same goes for switching between light and dark mode: only colors change.
 export function GlobalMap({
   match,
   results,
@@ -45,6 +47,7 @@ export function GlobalMap({
   match: MatchWithTeams;
   results: CountryResult[];
 }) {
+  const theme = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const loadedRef = useRef(false);
@@ -59,9 +62,11 @@ export function GlobalMap({
   // Latest props for the event handlers created once in the mount effect.
   const matchRef = useRef(match);
   const resultsRef = useRef(results);
+  const themeRef = useRef(theme);
   useEffect(() => {
     matchRef.current = match;
     resultsRef.current = results;
+    themeRef.current = theme;
   });
 
   useEffect(() => {
@@ -81,7 +86,7 @@ export function GlobalMap({
       attributionControl: true,
       // Resizing is handled by the ResizeObserver below. Mapbox's own
       // window-resize handling tags its camera events like user input,
-      // which would make fitWorld() think the visitor had moved the map.
+      // which would make refit() think the visitor had moved the map.
       trackResize: false,
       // On phones the map sits inside a scrolling page: one finger scrolls
       // the page, two fingers move the map (Mapbox shows a hint).
@@ -98,74 +103,31 @@ export function GlobalMap({
     map.on("movestart", (e) => {
       if ((e as { originalEvent?: Event }).originalEvent) userMoved = true;
     });
-    function fitWorld() {
+    function refit() {
       map.resize();
       if (userMoved) return;
       const wide = window.matchMedia("(min-width: 768px)").matches;
       // On desktop the slim match header floats over the top of the map.
-      const padding = wide ? { top: 84, bottom: 16, left: 16, right: 16 } : 8;
+      const padding = wide
+        ? { top: 84, bottom: 16, left: 16, right: 16 }
+        : { top: 8, bottom: 8, left: 8, right: 8 };
       // Reset first: a minZoom left over from a previous (bigger) size
       // would otherwise stop the map from zooming out to fit.
-      map.setMinZoom(0);
-      map.fitBounds(WORLD_BOUNDS, { padding, animate: false });
-      map.setMinZoom(Math.max(map.getZoom() - 0.3, 0));
+      map.setMinZoom(-2);
+      fitWorld(map, padding);
+      map.setMinZoom(map.getZoom() - 0.3);
     }
-    const resizeObserver = new ResizeObserver(() => fitWorld());
+    const resizeObserver = new ResizeObserver(() => refit());
     resizeObserver.observe(container);
 
     map.on("load", () => {
       const beforeId = tidyBaseStyle(map, { keepCountryLabels: true });
-
-      map.addSource(COUNTRY_SOURCE_ID, {
-        type: "vector",
-        url: COUNTRY_TILESET_URL,
-        promoteId: "iso_3166_1",
-      });
-
-      map.addLayer(
-        {
-          id: FILL_LAYER_ID,
-          type: "fill",
-          source: COUNTRY_SOURCE_ID,
-          "source-layer": COUNTRY_SOURCE_LAYER,
-          filter: WORLDVIEW_FILTER,
-          paint: {
-            "fill-color": ["coalesce", ["feature-state", "fillColor"], UNDECIDED_COLOR],
-            // Countries without votes stay transparent (the dark base map
-            // shows through); hovering brightens a colored country a bit.
-            "fill-opacity": [
-              "*",
-              ["coalesce", ["feature-state", "opacity"], 0],
-              ["case", ["boolean", ["feature-state", "hover"], false], 1.2, 1],
-            ],
-          },
-        },
-        beforeId
-      );
-
-      addCountryBorders(map, beforeId);
-
-      map.addLayer(
-        {
-          id: HOVER_LAYER_ID,
-          type: "line",
-          source: COUNTRY_SOURCE_ID,
-          "source-layer": COUNTRY_SOURCE_LAYER,
-          filter: WORLDVIEW_FILTER,
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": 1.2,
-            "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.85, 0],
-          },
-        },
-        beforeId
-      );
-
+      addCountryLayers(map, { beforeId, withHover: true });
       loadedRef.current = true;
       applyResults();
     });
 
-    // Hover: outline + dark tooltip (styled in globals.css, .fanmap-popup).
+    // Hover: outline + tooltip (styled in globals.css, .fanmap-popup).
     let hoveredId: string | number | null = null;
     const popup = new mapboxgl.Popup({
       closeButton: false,
@@ -194,7 +156,7 @@ export function GlobalMap({
 
       const code = String(feature.id);
       const m = matchRef.current;
-      const colors = getMatchColors(m);
+      const colors = getMatchColors(m, themeRef.current);
       const r = resultsRef.current.find((x) => x.countryCode === code);
       const { homePct, awayPct, total } = splitPercent(r?.homeVotes ?? 0, r?.awayVotes ?? 0);
       const body =
@@ -215,10 +177,13 @@ export function GlobalMap({
       popup.remove();
     });
 
+    // Paints the map for the current match, results and light/dark mode.
     function applyResults() {
       if (!loadedRef.current) return;
-      const colors = getMatchColors(matchRef.current);
       const m = matchRef.current;
+      const colors = getMatchColors(m, themeRef.current);
+      const palette = MAP_PALETTE[themeRef.current];
+      applyMapPalette(map, themeRef.current);
 
       for (const code of coloredCountriesRef.current) {
         map.setFeatureState(
@@ -232,7 +197,7 @@ export function GlobalMap({
         if (r.totalVotes === 0) continue;
         let state: { fillColor: string; lineColor: string | null; opacity: number };
         if (!r.leadingTeamId) {
-          state = { fillColor: UNDECIDED_COLOR, lineColor: null, opacity: UNDECIDED_OPACITY };
+          state = { fillColor: palette.undecided, lineColor: null, opacity: UNDECIDED_OPACITY };
         } else {
           const homeLeads = r.leadingTeamId === m.home_team_id;
           const leaderVotes = homeLeads ? r.homeVotes : r.awayVotes;
@@ -261,7 +226,7 @@ export function GlobalMap({
 
   useEffect(() => {
     applyResultsRef.current?.();
-  }, [match.id, results]);
+  }, [match.id, results, theme]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

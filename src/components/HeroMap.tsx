@@ -4,46 +4,47 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { HeroCountry } from "@/lib/heroPreview";
+import { useTheme } from "@/lib/theme";
 import {
   COUNTRY_SOURCE_ID,
   COUNTRY_SOURCE_LAYER,
-  COUNTRY_TILESET_URL,
-  FILL_LAYER_ID,
   MAP_STYLE,
   PROJECTION,
-  WORLDVIEW_FILTER,
   WORLD_BOUNDS,
-  addCountryBorders,
+  addCountryLayers,
+  applyMapPalette,
+  fitWorld,
   getMapboxToken,
   tidyBaseStyle,
 } from "@/lib/mapSetup";
 
-const FADE_IN_MS = 650; // one country fading in
-const STAGGER_MS = 25; // delay between consecutive countries (west → east)
+const FADE_IN_MS = 700; // one country fading in
+const STAGGER_MS = 22; // delay between consecutive countries (west → east)
 const FADE_OUT_MS = 350; // previous match fading out before the next one
 
 export type HeroSlide = { countries: HeroCountry[]; homeColor: string; awayColor: string };
 
 const colorOf = (s: HeroSlide, c: HeroCountry) => (c.side === "home" ? s.homeColor : s.awayColor);
 
-// Decorative, non-interactive world map behind the landing-page headline.
-// Each time `slide` changes (the showcase rotates to another match), the
-// previous match's colors fade out and the new match's countries "light
+// Decorative, non-interactive world map on the home page. Each time `slide`
+// changes (the showcase rotates to another match, or the visitor switches
+// light/dark mode), the previous colors fade out and the countries "light
 // up" one after another, west → east. The Mapbox instance is created once
 // and reused for every slide. Visitors who prefer reduced motion get each
 // finished map immediately.
 //
 // Separate from GlobalMap on purpose: no hover, no controls, no polling —
-// it's a picture, and keeping it simple keeps the landing page light.
+// it's a picture, and keeping it simple keeps the home page light.
 export function HeroMap({ slide }: { slide: HeroSlide }) {
+  const theme = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const loadedRef = useRef(false);
   const frameRef = useRef(0);
   // The slide whose countries are currently colored (null = none yet).
   const shownRef = useRef<HeroSlide | null>(null);
-  // Latest requested slide, for the map's load handler.
-  const latestSlideRef = useRef(slide);
+  // Latest props, for the map's load handler.
+  const latestRef = useRef({ slide, theme });
 
   function setCountry(c: HeroCountry, color: string | null, progress: number) {
     mapRef.current?.setFeatureState(
@@ -52,7 +53,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
         fillColor: color,
         // Border lights up together with the fill.
         lineColor: progress > 0.5 ? color : null,
-        opacity: (0.3 + c.strength * 0.45) * progress,
+        opacity: (0.42 + c.strength * 0.5) * progress,
       }
     );
   }
@@ -100,11 +101,13 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
   }
 
   useEffect(() => {
-    latestSlideRef.current = slide;
-    showSlide(slide);
-    // showSlide only touches refs and the map; re-running on `slide` is the point.
+    latestRef.current = { slide, theme };
+    if (!loadedRef.current || !mapRef.current) return;
+    applyMapPalette(mapRef.current, theme);
+    if (shownRef.current !== slide) showSlide(slide);
+    // showSlide only touches refs and the map; re-running on these is the point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slide]);
+  }, [slide, theme]);
 
   useEffect(() => {
     const token = getMapboxToken();
@@ -125,36 +128,26 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     mapRef.current = map;
     map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
 
+    // Keep the whole world in view at any size, leaving room for what
+    // HeroShowcase floats over the map: on desktop the headline in the
+    // bottom-left corner (empty South Pacific), on phones the match caption
+    // along the bottom.
     const resizeObserver = new ResizeObserver(() => {
       map.resize();
-      map.fitBounds(WORLD_BOUNDS, { padding: 10, animate: false });
+      const wide = window.matchMedia("(min-width: 768px)").matches;
+      const padding = wide
+        ? { top: 12, bottom: 12, left: Math.round(container.clientWidth * 0.1), right: 12 }
+        : { top: 8, bottom: 96, left: 8, right: 8 };
+      fitWorld(map, padding);
     });
     resizeObserver.observe(container);
 
     map.on("load", () => {
       const beforeId = tidyBaseStyle(map, { keepCountryLabels: false });
-      map.addSource(COUNTRY_SOURCE_ID, {
-        type: "vector",
-        url: COUNTRY_TILESET_URL,
-        promoteId: "iso_3166_1",
-      });
-      map.addLayer(
-        {
-          id: FILL_LAYER_ID,
-          type: "fill",
-          source: COUNTRY_SOURCE_ID,
-          "source-layer": COUNTRY_SOURCE_LAYER,
-          filter: WORLDVIEW_FILTER,
-          paint: {
-            "fill-color": ["coalesce", ["feature-state", "fillColor"], "#000000"],
-            "fill-opacity": ["coalesce", ["feature-state", "opacity"], 0],
-          },
-        },
-        beforeId
-      );
-      addCountryBorders(map, beforeId);
+      addCountryLayers(map, { beforeId, withHover: false });
+      applyMapPalette(map, latestRef.current.theme);
       loadedRef.current = true;
-      showSlide(latestSlideRef.current);
+      showSlide(latestRef.current.slide);
     });
 
     return () => {
