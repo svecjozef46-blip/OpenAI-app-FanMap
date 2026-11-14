@@ -61,7 +61,7 @@ Hlas zapisuje databázová funkcia `submit_vote()`. Dá sa zavolať verejným k�
 Každý hlas prejde na serveri (`src/app/api/votes/route.ts`) dvoma kontrolami, skôr než sa zapíše:
 
 1. **Limit podľa IP adresy:** najviac 20 pokusov o hlas za minútu a 300 za hodinu z jednej adresy. Počíta to databázová funkcia `register_vote_attempt()` nad tabuľkou `vote_attempts`. Adresa sa neukladá, len jej odtlačok, a záznamy staršie ako hodina sa mažú. Nad limit appka odpovie „Too many votes from your network right now“.
-2. **Cloudflare Turnstile:** prehliadač si pred odoslaním hlasu vypýta od Cloudflare jednorazový token (`src/lib/turnstile.ts`) a server ho overí (`src/lib/turnstileServer.ts`). Bez platného tokenu sa hlas nezapíše. Fanúšik zvyčajne nič nevidí; okienko s overením sa objaví dole na obrazovke, len keď Cloudflare chce kliknutie.
+2. **Cloudflare Turnstile:** prehliadač si pred odoslaním hlasu vypýta od Cloudflare jednorazový token (`src/lib/turnstile.ts`) a server ho overí (`src/lib/turnstileServer.ts`). Bez platného tokenu sa hlas nezapíše. Token sa pripravuje vopred, hneď po otvorení stránky, aby hlasovanie nezdržiaval. Fanúšik zvyčajne nič nevidí; okienko s overením sa objaví dole na obrazovke, len keď Cloudflare chce kliknutie.
 
 Nastavenie Turnstile:
 

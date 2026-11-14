@@ -1,6 +1,11 @@
-// Cloudflare Turnstile in the browser: gets a one-time "this is a human"
-// token right before a vote is sent. The server checks the token with
-// Cloudflare (lib/turnstileServer.ts) and refuses votes without a valid one.
+// Cloudflare Turnstile in the browser: provides a one-time "this is a
+// human" token for each vote. The server checks the token with Cloudflare
+// (lib/turnstileServer.ts) and refuses votes without a valid one.
+//
+// Getting a token takes Cloudflare a few seconds, so we don't wait for the
+// click: one hidden widget is started as soon as a page with vote buttons
+// opens and keeps a fresh token ready. A vote takes the ready token and the
+// widget immediately starts fetching the next one. That keeps voting fast.
 //
 // Friction stays low: the widget is "interaction-only", so most fans never
 // see it — it appears (bottom of the screen) only when Cloudflare wants a
@@ -8,12 +13,13 @@
 
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 const SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-// Long enough for someone to notice and click a challenge.
-const TIMEOUT_MS = 60_000;
+// How long a vote waits for a token that isn't ready yet — long enough for
+// someone to notice and click a challenge.
+const WAIT_MS = 45_000;
 
 type TurnstileApi = {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
-  remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
 };
 
 declare global {
@@ -22,9 +28,16 @@ declare global {
   }
 }
 
-let scriptPromise: Promise<TurnstileApi> | null = null;
+type Waiter = { resolve: (token: string) => void; reject: (error: Error) => void };
 
-function loadTurnstile(): Promise<TurnstileApi> {
+let scriptPromise: Promise<TurnstileApi> | null = null;
+let widgetPromise: Promise<{ api: TurnstileApi; id: string }> | null = null;
+// The token waiting to be used (each works once and expires after ~5 min).
+let readyToken: string | null = null;
+// Votes waiting for a token that hasn't arrived yet.
+let waiters: Waiter[] = [];
+
+function loadScript(): Promise<TurnstileApi> {
   if (!scriptPromise) {
     scriptPromise = new Promise<TurnstileApi>((resolve, reject) => {
       const script = document.createElement("script");
@@ -42,9 +55,55 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return scriptPromise;
 }
 
-// Fetches the script ahead of the first vote so the vote itself feels instant.
+// Creates the one widget for this page (once) and starts the first check.
+function ensureWidget(): Promise<{ api: TurnstileApi; id: string }> {
+  if (!widgetPromise) {
+    widgetPromise = loadScript().then((api) => {
+      const container = document.createElement("div");
+      // Above everything, bottom centre — visible only if a challenge appears.
+      container.style.cssText =
+        "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483000;";
+      document.body.appendChild(container);
+
+      const id = api.render(container, {
+        sitekey: SITE_KEY,
+        appearance: "interaction-only",
+        theme: document.documentElement.dataset.theme === "light" ? "light" : "dark",
+        callback: (token: string) => {
+          const waiter = waiters.shift();
+          if (waiter) {
+            // A vote was already waiting: hand the token over and fetch the
+            // next one (reset() must not run inside this callback).
+            waiter.resolve(token);
+            setTimeout(() => api.reset(id), 0);
+          } else {
+            readyToken = token;
+          }
+        },
+        // Turnstile fetches a new token by itself after expiry.
+        "expired-callback": () => {
+          readyToken = null;
+        },
+        "error-callback": (code: unknown) => {
+          readyToken = null;
+          for (const waiter of waiters) waiter.reject(new Error(`turnstile error ${String(code)}`));
+          waiters = [];
+          // true = "handled"; Turnstile retries on its own.
+          return true;
+        },
+      });
+      return { api, id };
+    });
+    widgetPromise.catch(() => {
+      widgetPromise = null;
+    });
+  }
+  return widgetPromise;
+}
+
+// Starts the human check ahead of the first vote so the vote itself is fast.
 export function preloadTurnstile(): void {
-  if (SITE_KEY) loadTurnstile().catch(() => {});
+  if (SITE_KEY) ensureWidget().catch(() => {});
 }
 
 // Resolves with a fresh token, or null when Turnstile isn't configured
@@ -52,39 +111,31 @@ export function preloadTurnstile(): void {
 // completed — the caller shows a readable message.
 export async function getTurnstileToken(): Promise<string | null> {
   if (!SITE_KEY) return null;
-  const turnstile = await loadTurnstile();
+  const { api, id } = await ensureWidget();
 
-  const container = document.createElement("div");
-  // Above everything, bottom centre — visible only if a challenge appears.
-  container.style.cssText =
-    "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:2147483000;";
-  document.body.appendChild(container);
+  if (readyToken) {
+    const token = readyToken;
+    readyToken = null;
+    // Start fetching the token for the next vote right away.
+    api.reset(id);
+    return token;
+  }
 
   return new Promise<string>((resolve, reject) => {
-    // Filled in once the widget exists; the callbacks below read it later.
-    const widget: { id?: string } = {};
-    const finish = (action: () => void) => {
-      clearTimeout(timer);
-      try {
-        if (widget.id) turnstile.remove(widget.id);
-      } catch {
-        // Already gone — nothing to clean up.
-      }
-      container.remove();
-      action();
-    };
-    const timer = setTimeout(() => finish(() => reject(new Error("turnstile timeout"))), TIMEOUT_MS);
-
-    widget.id = turnstile.render(container, {
-      sitekey: SITE_KEY,
-      appearance: "interaction-only",
-      theme: document.documentElement.dataset.theme === "light" ? "light" : "dark",
-      callback: (token: string) => finish(() => resolve(token)),
-      "error-callback": (code: unknown) => {
-        finish(() => reject(new Error(`turnstile error ${String(code)}`)));
-        // true = "handled", so Turnstile doesn't also log to the console.
-        return true;
+    const waiter: Waiter = {
+      resolve: (token) => {
+        clearTimeout(timer);
+        resolve(token);
       },
-    });
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    };
+    const timer = setTimeout(() => {
+      waiters = waiters.filter((w) => w !== waiter);
+      reject(new Error("turnstile timeout"));
+    }, WAIT_MS);
+    waiters.push(waiter);
   });
 }

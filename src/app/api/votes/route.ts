@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { verifyTurnstileToken } from "@/lib/turnstileServer";
+import { verifyTurnstileToken, type TurnstileResult } from "@/lib/turnstileServer";
 
 // Controlled server-side voting path (dev-prompt-chatgpt.md "ANTI-SPAM":
 // "Voting backend implemented safely, no privileged DB keys exposed in
@@ -143,14 +143,34 @@ export async function POST(request: NextRequest) {
   const supabase = createServerSupabaseClient();
 
   if (!isTrustedTestCaller(request, serverSecret)) {
-    // 1) Rate limit per IP address — before anything else, so a flood is
-    // cut off cheaply. The limit itself (20 a minute, 300 an hour) lives in
-    // register_vote_attempt() in docs/schema.sql; the reasoning is in
-    // docs/decisions-log.md.
-    const { data: allowed, error: rateError } = await supabase.rpc("register_vote_attempt", {
-      p_ip_hash: computeIpHash(ip, serverSecret),
-      p_server_secret: serverSecret,
-    });
+    // Two checks before a vote is recorded. They don't depend on each
+    // other, so they run at the same time — the fan waits for the slower
+    // one, not for both in a row.
+
+    // 1) Rate limit per IP address. The limit itself (20 a minute, 300 an
+    // hour) lives in register_vote_attempt() in docs/schema.sql; the
+    // reasoning is in docs/decisions-log.md.
+    const rateCheck = supabase
+      .rpc("register_vote_attempt", {
+        p_ip_hash: computeIpHash(ip, serverSecret),
+        p_server_secret: serverSecret,
+      })
+      .then((result) => result);
+
+    // 2) Human check (Cloudflare Turnstile). No valid token, no vote.
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+    const hasToken =
+      typeof turnstileToken === "string" && turnstileToken.length > 0 && turnstileToken.length <= 2048;
+    const humanCheck: Promise<TurnstileResult | "skipped"> = turnstileSecret
+      ? hasToken
+        ? verifyTurnstileToken(turnstileSecret, turnstileToken as string, ip === "local-dev" ? null : ip)
+        : Promise.resolve("rejected")
+      : // Never run the live site without the human check by accident;
+        // local development without Turnstile keys skips it.
+        Promise.resolve(process.env.NODE_ENV === "production" ? "unavailable" : "skipped");
+
+    const [{ data: allowed, error: rateError }, verdict] = await Promise.all([rateCheck, humanCheck]);
+
     if (rateError) {
       console.error("register_vote_attempt failed:", rateError);
       return NextResponse.json(UNAVAILABLE, { status: 503 });
@@ -161,26 +181,15 @@ export async function POST(request: NextRequest) {
         { status: 429, headers: { "Retry-After": "60" } }
       );
     }
-
-    // 2) Human check (Cloudflare Turnstile). No valid token, no vote.
-    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
-    if (turnstileSecret) {
-      if (typeof turnstileToken !== "string" || turnstileToken.length === 0 || turnstileToken.length > 2048) {
-        return NextResponse.json(NOT_VERIFIED, { status: 403 });
+    if (verdict === "unavailable") {
+      if (!turnstileSecret) {
+        console.error("TURNSTILE_SECRET_KEY is not set — votes cannot be recorded. See README.");
       }
-      const verdict = await verifyTurnstileToken(turnstileSecret, turnstileToken, ip === "local-dev" ? null : ip);
-      if (verdict === "unavailable") {
-        return NextResponse.json(UNAVAILABLE, { status: 503 });
-      }
-      if (verdict === "rejected") {
-        return NextResponse.json(NOT_VERIFIED, { status: 403 });
-      }
-    } else if (process.env.NODE_ENV === "production") {
-      // Never run the live site without the human check by accident.
-      console.error("TURNSTILE_SECRET_KEY is not set — votes cannot be recorded. See README.");
       return NextResponse.json(UNAVAILABLE, { status: 503 });
     }
-    // Local development without Turnstile keys: the check is skipped.
+    if (verdict === "rejected") {
+      return NextResponse.json(NOT_VERIFIED, { status: 403 });
+    }
   }
 
   const { data, error } = await supabase.rpc("submit_vote", {
