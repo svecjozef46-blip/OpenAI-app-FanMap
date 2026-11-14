@@ -167,6 +167,75 @@ $$;
 revoke all on function public.submit_vote(uuid, uuid, text, text, text) from public;
 grant execute on function public.submit_vote(uuid, uuid, text, text, text) to anon, authenticated;
 
+-- VOTE RATE LIMIT -------------------------------------------------------------
+-- One row per vote attempt, kept for an hour, so /api/votes can limit how
+-- many votes one IP address sends. The address is stored only as a
+-- fingerprint (SHA-256 mixed with the server secret), never as a raw IP.
+-- Invisible to the API: RLS on, no policies, no grants.
+create table public.vote_attempts (
+  ip_hash text not null,
+  attempted_at timestamptz not null default now()
+);
+create index vote_attempts_ip_time_idx on public.vote_attempts (ip_hash, attempted_at desc);
+create index vote_attempts_time_idx on public.vote_attempts (attempted_at);
+alter table public.vote_attempts enable row level security;
+revoke all on table public.vote_attempts from anon, authenticated;
+
+-- Called by src/app/api/votes/route.ts before every vote. Returns true and
+-- records the attempt when the address is under the limit, false when it is
+-- over: 20 attempts a minute, 300 an hour (reasoning in
+-- docs/decisions-log.md, 2026-11-14). A separate function from
+-- submit_vote() on purpose: a rejected vote rolls back its transaction, so
+-- attempts counted inside submit_vote() would vanish exactly when they
+-- matter (duplicates, invalid votes).
+create or replace function public.register_vote_attempt(
+  p_ip_hash text,
+  p_server_secret text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_last_minute integer;
+  v_last_hour integer;
+begin
+  if p_server_secret is null or not exists (
+    select 1 from public.server_secrets
+    where name = 'vote'
+      and secret_hash = encode(sha256(convert_to(p_server_secret, 'UTF8')), 'hex')
+  ) then
+    raise exception 'vote attempts are only accepted from the app server' using errcode = '42501';
+  end if;
+
+  if p_ip_hash is null or length(p_ip_hash) < 16 then
+    raise exception 'invalid address fingerprint' using errcode = '22023';
+  end if;
+
+  -- Housekeeping: nothing older than the longest window is needed.
+  delete from public.vote_attempts where attempted_at < now() - interval '1 hour';
+
+  select
+    count(*) filter (where attempted_at > now() - interval '1 minute'),
+    count(*)
+  into v_last_minute, v_last_hour
+  from public.vote_attempts
+  where ip_hash = p_ip_hash
+    and attempted_at > now() - interval '1 hour';
+
+  if v_last_minute >= 20 or v_last_hour >= 300 then
+    return false;
+  end if;
+
+  insert into public.vote_attempts (ip_hash) values (p_ip_hash);
+  return true;
+end;
+$$;
+
+revoke all on function public.register_vote_attempt(text, text) from public;
+grant execute on function public.register_vote_attempt(text, text) to anon, authenticated;
+
 -- ROW LEVEL SECURITY --------------------------------------------------------
 -- Public (anon/authenticated) gets read-only access to active content, and
 -- NO direct write access anywhere. Writes to leagues/teams/matches happen

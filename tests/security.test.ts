@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { FIXTURE, supabaseRest } from "./helpers.ts";
+import { FIXTURE, VOTE_SECRET, supabaseRest } from "./helpers.ts";
 
 // Database security (Row Level Security), checked by talking to Supabase
 // directly with the public anon key — i.e. what anyone on the internet can
@@ -121,6 +121,39 @@ test("no direct vote attempt above left a vote behind", async () => {
 
 test("the server secret table is invisible to anonymous visitors", async () => {
   const response = await supabaseRest("server_secrets?select=*");
+  const rows = response.ok ? await response.json() : [];
+  assert.deepEqual(rows, []);
+});
+
+// Rate limit per IP address: register_vote_attempt() counts attempts and
+// says "no" after 20 in a minute. Like submit_vote(), it only works for
+// callers that know the server secret.
+const registerAttempt = (ipHash: string, secret: string | null) =>
+  supabaseRest("rpc/register_vote_attempt", {
+    method: "POST",
+    body: JSON.stringify({ p_ip_hash: ipHash, p_server_secret: secret }),
+  });
+
+test("the rate-limit function refuses callers without the server secret", async () => {
+  for (const secret of ["", "guess", null]) {
+    const response = await registerAttempt(`test-${randomUUID()}`, secret);
+    assert.ok([401, 403].includes(response.status), `secret ${JSON.stringify(secret)} must be refused`);
+  }
+});
+
+test("one address gets 20 vote attempts a minute, the 21st is refused", { skip: !VOTE_SECRET }, async () => {
+  const ipHash = `test-${randomUUID()}`;
+  for (let attempt = 1; attempt <= 20; attempt++) {
+    const response = await registerAttempt(ipHash, VOTE_SECRET);
+    assert.equal(await response.json(), true, `attempt ${attempt} should be allowed`);
+  }
+  assert.equal(await (await registerAttempt(ipHash, VOTE_SECRET)).json(), false);
+  // Another address is not affected.
+  assert.equal(await (await registerAttempt(`test-${randomUUID()}`, VOTE_SECRET)).json(), true);
+});
+
+test("the vote attempts log is invisible to anonymous visitors", async () => {
+  const response = await supabaseRest("vote_attempts?select=*");
   const rows = response.ok ? await response.json() : [];
   assert.deepEqual(rows, []);
 });

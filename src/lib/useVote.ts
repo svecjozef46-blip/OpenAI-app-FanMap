@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getVoterSeed, rememberMyVote, useMyVoteForMatch } from "@/lib/voter";
 import { dispatchVoteCast } from "@/lib/voteCastEvent";
+import { getTurnstileToken, preloadTurnstile } from "@/lib/turnstile";
 
 export type VoteStatus = "idle" | "pending" | "voted" | "duplicate" | "error";
 
@@ -24,16 +25,33 @@ export function useVote(matchId: string, onVoted?: () => void) {
   // see lib/voter.ts) — survives match switches and reloads.
   const myVoteTeamId = useMyVoteForMatch(matchId);
 
+  // Fetch the human-check script ahead of time so the first vote is fast.
+  useEffect(() => {
+    preloadTurnstile();
+  }, []);
+
   async function vote(teamId: string) {
     if (myVoteTeamId !== null || status === "pending") return;
 
     setStatus("pending");
     setErrorMessage(null);
+
+    // Human check first (Cloudflare Turnstile) — the server refuses a vote
+    // without a valid token. Usually invisible; see lib/turnstile.ts.
+    let turnstileToken: string | null;
+    try {
+      turnstileToken = await getTurnstileToken();
+    } catch {
+      setErrorMessage("We couldn't confirm you're a real fan. Check your connection or ad blocker and try again.");
+      setStatus("error");
+      return;
+    }
+
     try {
       const response = await fetch("/api/votes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId, teamId, voterSeed: getVoterSeed() }),
+        body: JSON.stringify({ matchId, teamId, voterSeed: getVoterSeed(), turnstileToken }),
       });
 
       if (response.status === 409) {

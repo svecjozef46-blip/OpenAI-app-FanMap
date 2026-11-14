@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { FIXTURE, postVote } from "./helpers.ts";
+import { FIXTURE, TURNSTILE_ON, postVote } from "./helpers.ts";
 
 // The voting flow through the app's API (/api/votes). Needs the app
 // running locally (`npm run dev`, with FANMAP_DEV_COUNTRY set in
@@ -66,4 +66,29 @@ test("a malformed request is rejected with a readable message, not a crash", asy
     assert.equal(response.status, 400);
     assert.equal(typeof (await response.json()).message, "string");
   }
+});
+
+// Human check (Cloudflare Turnstile): a visitor's vote needs a valid token.
+// Skipped when the app runs without TURNSTILE_SECRET_KEY (check is off).
+const freshVote = () => ({
+  matchId: FIXTURE.openMatchId,
+  teamId: FIXTURE.homeTeamId,
+  voterSeed: `test-${randomUUID()}`,
+});
+
+test("a vote without the human-check token is rejected", { skip: !TURNSTILE_ON }, async () => {
+  const response = await postVote(freshVote(), { asVisitor: true });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "verification_failed");
+});
+
+test("a vote with a made-up human-check token is rejected", { skip: !TURNSTILE_ON }, async () => {
+  const response = await postVote({ ...freshVote(), turnstileToken: "made-up-token" }, { asVisitor: true });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "verification_failed");
+});
+
+test("a wrong test secret gets no special treatment", { skip: !TURNSTILE_ON }, async () => {
+  const response = await postVote(freshVote(), { testSecret: "guess" });
+  assert.equal(response.status, 403);
 });

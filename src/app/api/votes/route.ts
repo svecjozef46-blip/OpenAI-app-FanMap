@@ -1,6 +1,7 @@
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { verifyTurnstileToken } from "@/lib/turnstileServer";
 
 // Controlled server-side voting path (dev-prompt-chatgpt.md "ANTI-SPAM":
 // "Voting backend implemented safely, no privileged DB keys exposed in
@@ -14,6 +15,7 @@ type VoteRequestBody = {
   matchId?: unknown;
   teamId?: unknown;
   voterSeed?: unknown;
+  turnstileToken?: unknown;
 };
 
 const UUID_RE =
@@ -58,6 +60,32 @@ function computeVoterHash(ip: string, userAgent: string, seed: string): string {
   return createHash("sha256").update(`${seed}:${ip}:${userAgent}`).digest("hex");
 }
 
+// The address is stored for rate limiting only as a fingerprint mixed with
+// the server secret, so the table never holds a raw IP address and the
+// fingerprint can't be reversed by trying all addresses.
+function computeIpHash(ip: string, serverSecret: string): string {
+  return createHash("sha256").update(`${serverSecret}:${ip}`).digest("hex");
+}
+
+// Our own automated tests (tests/voting.test.ts) can't solve a Turnstile
+// challenge, and they send many votes in a row. They identify themselves
+// with the server secret in this header, which skips the human check and
+// the rate limit. That gives away nothing: whoever knows the secret could
+// already record votes straight in the database.
+function isTrustedTestCaller(request: NextRequest, serverSecret: string): boolean {
+  const given = request.headers.get("x-fanmap-test-secret");
+  if (!given) return false;
+  const a = createHash("sha256").update(given).digest();
+  const b = createHash("sha256").update(serverSecret).digest();
+  return timingSafeEqual(a, b);
+}
+
+const UNAVAILABLE = { error: "not_configured", message: "Voting is temporarily unavailable. Please try again later." };
+const NOT_VERIFIED = {
+  error: "verification_failed",
+  message: "We couldn't confirm you're a real fan. Please reload the page and try again.",
+};
+
 export async function POST(request: NextRequest) {
   let body: VoteRequestBody;
   try {
@@ -69,7 +97,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { matchId, teamId, voterSeed } = body;
+  const { matchId, teamId, voterSeed, turnstileToken } = body;
 
   if (
     typeof matchId !== "string" ||
@@ -113,6 +141,48 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createServerSupabaseClient();
+
+  if (!isTrustedTestCaller(request, serverSecret)) {
+    // 1) Rate limit per IP address — before anything else, so a flood is
+    // cut off cheaply. The limit itself (20 a minute, 300 an hour) lives in
+    // register_vote_attempt() in docs/schema.sql; the reasoning is in
+    // docs/decisions-log.md.
+    const { data: allowed, error: rateError } = await supabase.rpc("register_vote_attempt", {
+      p_ip_hash: computeIpHash(ip, serverSecret),
+      p_server_secret: serverSecret,
+    });
+    if (rateError) {
+      console.error("register_vote_attempt failed:", rateError);
+      return NextResponse.json(UNAVAILABLE, { status: 503 });
+    }
+    if (allowed === false) {
+      return NextResponse.json(
+        { error: "rate_limited", message: "Too many votes from your network right now. Please wait a minute and try again." },
+        { status: 429, headers: { "Retry-After": "60" } }
+      );
+    }
+
+    // 2) Human check (Cloudflare Turnstile). No valid token, no vote.
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+    if (turnstileSecret) {
+      if (typeof turnstileToken !== "string" || turnstileToken.length === 0 || turnstileToken.length > 2048) {
+        return NextResponse.json(NOT_VERIFIED, { status: 403 });
+      }
+      const verdict = await verifyTurnstileToken(turnstileSecret, turnstileToken, ip === "local-dev" ? null : ip);
+      if (verdict === "unavailable") {
+        return NextResponse.json(UNAVAILABLE, { status: 503 });
+      }
+      if (verdict === "rejected") {
+        return NextResponse.json(NOT_VERIFIED, { status: 403 });
+      }
+    } else if (process.env.NODE_ENV === "production") {
+      // Never run the live site without the human check by accident.
+      console.error("TURNSTILE_SECRET_KEY is not set — votes cannot be recorded. See README.");
+      return NextResponse.json(UNAVAILABLE, { status: 503 });
+    }
+    // Local development without Turnstile keys: the check is skipped.
+  }
+
   const { data, error } = await supabase.rpc("submit_vote", {
     p_match_id: matchId,
     p_team_id: teamId,

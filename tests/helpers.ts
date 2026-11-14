@@ -58,11 +58,27 @@ export const FIXTURE = {
   awayTeamId: "00000000-0000-4000-a000-000000000012",
 };
 
+// The server secret (.env.local). Tests use it for two things only: to
+// identify themselves to /api/votes (they can't solve a Turnstile challenge)
+// and to exercise the rate-limit function directly.
+export const VOTE_SECRET = process.env.FANMAP_VOTE_SECRET ?? "";
+// Whether the app under test enforces the Turnstile human check.
+export const TURNSTILE_ON = Boolean(process.env.TURNSTILE_SECRET_KEY);
+
 // Sends a vote through the app's own API, like the vote buttons do.
-export function postVote(body: unknown): Promise<Response> {
+// By default as our trusted test caller (skips the human check and the rate
+// limit); `asVisitor` sends it exactly as an unknown visitor would, and
+// `testSecret` lets a test try a wrong secret.
+export function postVote(
+  body: unknown,
+  { asVisitor = false, testSecret = VOTE_SECRET } = {}
+): Promise<Response> {
   return fetch(`${APP_URL}/api/votes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(asVisitor ? {} : { "x-fanmap-test-secret": testSecret }),
+    },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }

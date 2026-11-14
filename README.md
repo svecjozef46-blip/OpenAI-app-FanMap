@@ -28,11 +28,12 @@ Appka beží na `http://localhost:3000`.
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — z Supabase projektu (Project Settings → API). Appka nikde nepoužíva service-role kľúč — pozri "Databáza" nižšie, prečo to nie je potrebné.
 - `NEXT_PUBLIC_MAPBOX_TOKEN` — verejný (public) Mapbox token.
 - `FANMAP_VOTE_SECRET` — **povinné pre hlasovanie.** Dlhý náhodný reťazec, ktorým server dokazuje databáze, že hlas ide z našej appky. Pozri „Hlasovanie a bezpečnosť“ nižšie.
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` a `TURNSTILE_SECRET_KEY` — kľúče Cloudflare Turnstile (overenie, že hlasuje človek). **Na produkcii povinné.** Lokálne môžu ostať prázdne, overenie je potom vypnuté. Pozri „Hlasovanie a bezpečnosť“ nižšie.
 - `FANMAP_DEV_COUNTRY` — voliteľné, len pre lokálny vývoj. V produkcii (na Vercel) appka pozná krajinu hlasujúceho automaticky (hlavička `x-vercel-ip-country`), lokálne táto hlavička neexistuje, takže bez tejto premennej by `npm run dev` hlasovanie odmietal s `country_unknown`. Nastav na 2-písmenový kód krajiny, napr. `SK`.
 
 ## Databáza
 
-Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, `server_secrets`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
+Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, `server_secrets`, `vote_attempts`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
 
 Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decisions-log.md`):
 - Tabuľka `votes` nemá pre `anon`/`authenticated` role žiadne RLS politiky — priamy prístup (čítanie aj zápis) je úplne zablokovaný.
@@ -54,6 +55,19 @@ Hlas zapisuje databázová funkcia `submit_vote()`. Dá sa zavolať verejným k�
      set secret_hash = encode(sha256(convert_to('NOVY_KLUC', 'UTF8')), 'hex')
      where name = 'vote';
      ```
+
+### Ochrana pred hromadným hlasovaním
+
+Každý hlas prejde na serveri (`src/app/api/votes/route.ts`) dvoma kontrolami, skôr než sa zapíše:
+
+1. **Limit podľa IP adresy:** najviac 20 pokusov o hlas za minútu a 300 za hodinu z jednej adresy. Počíta to databázová funkcia `register_vote_attempt()` nad tabuľkou `vote_attempts`. Adresa sa neukladá, len jej odtlačok, a záznamy staršie ako hodina sa mažú. Nad limit appka odpovie „Too many votes from your network right now“.
+2. **Cloudflare Turnstile:** prehliadač si pred odoslaním hlasu vypýta od Cloudflare jednorazový token (`src/lib/turnstile.ts`) a server ho overí (`src/lib/turnstileServer.ts`). Bez platného tokenu sa hlas nezapíše. Fanúšik zvyčajne nič nevidí; okienko s overením sa objaví dole na obrazovke, len keď Cloudflare chce kliknutie.
+
+Nastavenie Turnstile:
+
+- V Cloudflare (Turnstile → widget) musia byť v zozname domén `localhost` aj doména appky na Verceli.
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` a `TURNSTILE_SECRET_KEY` musia byť v `.env.local` aj vo Verceli. **Bez `TURNSTILE_SECRET_KEY` hlasovanie na produkcii nefunguje.** Po zmene `NEXT_PUBLIC_…` kľúča treba appku vo Verceli znova nasadiť.
+- Automatické testy sa preukazujú tajným kľúčom servera (hlavička `x-fanmap-test-secret`), preto ich Turnstile ani limit nezastaví.
 
 ## Testy
 
