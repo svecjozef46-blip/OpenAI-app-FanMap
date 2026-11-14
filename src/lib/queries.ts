@@ -16,8 +16,13 @@ import type { League, MatchResultRow, MatchTotals, MatchWithTeams } from "@/lib/
 const MATCH_SELECT = `
   id, league_id, home_team_id, away_team_id, kickoff_at, status, is_featured, created_at,
   home_team:teams!matches_home_team_id_fkey(*),
-  away_team:teams!matches_away_team_id_fkey(*)
+  away_team:teams!matches_away_team_id_fkey(*),
+  league:leagues!inner(id)
 `;
+// `league:leagues!inner(id)` is a filter, not data: visitors can only read
+// ACTIVE leagues (RLS), so the inner join drops every match whose league is
+// switched off. That hides US-sports fixtures before launch and the
+// "Internal tests" league used by the automated tests (tests/README.md).
 
 // Supabase's JS client types joined relations loosely; this narrows the
 // query result back to MatchWithTeams in one place instead of casting at

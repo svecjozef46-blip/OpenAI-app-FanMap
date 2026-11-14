@@ -42,8 +42,27 @@ export type TestMatch = {
 // Every match a visitor can see, with both teams.
 export async function getVisibleMatches(): Promise<TestMatch[]> {
   const select =
-    "id,status,home_team_id,away_team_id,home_team:teams!matches_home_team_id_fkey(*),away_team:teams!matches_away_team_id_fkey(*)";
+    "id,status,home_team_id,away_team_id,home_team:teams!matches_home_team_id_fkey!inner(*),away_team:teams!matches_away_team_id_fkey!inner(*),league:leagues!inner(id)";
   const response = await supabaseRest(`matches?select=${select}`);
   if (!response.ok) throw new Error(`Could not load matches: ${response.status}`);
   return response.json();
+}
+
+// Fixtures for the voting tests: a hidden league ("Internal tests",
+// is_active = false, so the site never shows it) with one open and one
+// finished match. Created once in the database — see tests/README.md.
+export const FIXTURE = {
+  openMatchId: "00000000-0000-4000-a000-000000000021",
+  finishedMatchId: "00000000-0000-4000-a000-000000000022",
+  homeTeamId: "00000000-0000-4000-a000-000000000011",
+  awayTeamId: "00000000-0000-4000-a000-000000000012",
+};
+
+// Sends a vote through the app's own API, like the vote buttons do.
+export function postVote(body: unknown): Promise<Response> {
+  return fetch(`${APP_URL}/api/votes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
 }

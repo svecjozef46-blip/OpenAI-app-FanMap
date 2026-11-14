@@ -39,6 +39,19 @@ Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decision
 - Čítanie výsledkov hlasovania ide cez pohľad `public.match_results` (agregované počty hlasov podľa krajiny, žiadne surové riadky ani `voter_hash`) — jediný spôsob, akým appka číta dáta o hlasoch.
 - Žiadne oficiálne logá klubov (`teams.logo_url` je zámerne `null`) — pozri `docs/idea.md` "trademark caution".
 
+## Testy
+
+```
+npm run dev   # v jednom okne (testy hlasovania volajú bežiacu appku)
+npm test      # v druhom
+```
+
+Vstavaný testovací nástroj Node 24, bez ďalších závislostí. Pokrýva hlasovanie cez `/api/votes`, bezpečnosť databázy (RLS) volaním Supabase verejným kľúčom a rozlíšiteľnosť farieb tímov pri farbosleposti. Testy hlasujú len do skrytej ligy „Internal tests“, ktorú web nezobrazuje — v admine ju nechaj tak. Podrobnosti v `tests/README.md`.
+
+## Ikony a inštalácia na plochu (PWA)
+
+Appka sa dá pridať na plochu telefónu pod názvom „Fanzo“ (`src/app/manifest.ts`). Ikony kreslí `python scripts/generate-icons.py`; po zmene farieb v skripte ho stačí spustiť znova.
+
 ## Vzhľad: svetlý a tmavý režim
 
 - Predvolene sa appka riadi nastavením zariadenia. Prepínač je v hornej lište, voľba Auto / Light / Dark v pätičke (`src/components/ThemeToggle.tsx`, logika v `src/lib/theme.ts`).
