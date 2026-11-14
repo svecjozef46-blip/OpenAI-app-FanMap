@@ -99,12 +99,26 @@ export async function POST(request: NextRequest) {
   const userAgent = request.headers.get("user-agent") ?? "unknown";
   const voterHash = computeVoterHash(ip, userAgent, voterSeed);
 
+  // Proves to the database that this vote comes from our server, not from
+  // someone calling submit_vote() directly with the public key (which would
+  // let them invent the country and the voter). Server-only: the variable
+  // has no NEXT_PUBLIC_ prefix, so it never reaches the browser.
+  const serverSecret = process.env.FANMAP_VOTE_SECRET;
+  if (!serverSecret) {
+    console.error("FANMAP_VOTE_SECRET is not set — votes cannot be recorded. See README.");
+    return NextResponse.json(
+      { error: "not_configured", message: "Voting is temporarily unavailable. Please try again later." },
+      { status: 503 }
+    );
+  }
+
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.rpc("submit_vote", {
     p_match_id: matchId,
     p_team_id: teamId,
     p_country_code: countryCode,
     p_voter_hash: voterHash,
+    p_server_secret: serverSecret,
   });
 
   if (error) {
@@ -116,6 +130,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "already_voted", message: "Your vote for this match is already recorded." },
         { status: 409 }
+      );
+    }
+    // 42501 = the database didn't accept our server secret (missing or
+    // different from the one registered in server_secrets).
+    if (error.code === "42501") {
+      console.error("submit_vote rejected the server secret — check FANMAP_VOTE_SECRET. See README.");
+      return NextResponse.json(
+        { error: "not_configured", message: "Voting is temporarily unavailable. Please try again later." },
+        { status: 503 }
       );
     }
     // VC001 = our own "voting closed" code, raised by submit_vote() when

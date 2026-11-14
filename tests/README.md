@@ -12,7 +12,7 @@ Uses Node's built-in test runner (Node 24 runs the TypeScript files directly), s
 | File | What it checks | Needs the app running? |
 |---|---|---|
 | `voting.test.ts` | The voting flow through `/api/votes`: a first vote is accepted, a duplicate is rejected, a finished match is rejected, wrong team and malformed requests are rejected. | Yes |
-| `security.test.ts` | Database security, by calling Supabase directly with the public key like any stranger could: no reading, inserting, changing or deleting votes; no editing matches, teams or leagues; `submit_vote()` refuses wrong teams, finished and unknown matches. | No |
+| `security.test.ts` | Database security, by calling Supabase directly with the public key like any stranger could: no reading, inserting, changing or deleting votes; no editing matches, teams or leagues; `submit_vote()` cannot be called directly without the server secret. | No |
 | `colors.test.ts` | Team colors stay distinguishable for color-blind fans, on tricky pairs and on every match currently in the database, in light and dark mode. | No |
 
 ## What the tests touch

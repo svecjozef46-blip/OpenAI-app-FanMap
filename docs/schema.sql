@@ -86,17 +86,38 @@ create table public.feedback (
   created_at timestamptz not null default now()
 );
 
+-- SERVER SECRETS -------------------------------------------------------------
+-- Fingerprints (SHA-256) of secrets only our own server knows — never the
+-- secrets themselves. Invisible to the API: RLS on, no policies, no grants.
+-- The 'vote' row must match FANMAP_VOTE_SECRET in the app's environment;
+-- README "Hlasovanie a bezpecnost" explains how to set or rotate it.
+create table public.server_secrets (
+  name text primary key,
+  secret_hash text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.server_secrets enable row level security;
+revoke all on table public.server_secrets from anon, authenticated;
+-- insert into public.server_secrets (name, secret_hash)
+-- values ('vote', encode(sha256(convert_to('<the secret>', 'UTF8')), 'hex'));
+
 -- VOTE SUBMISSION FUNCTION ---------------------------------------------------
 -- The ONLY way votes get written. SECURITY DEFINER so it can insert into
--- votes (which has zero RLS policies for anon/authenticated — see below)
--- while itself being narrowly scoped and auditable. Called via Supabase
--- RPC with the public anon key from src/app/api/votes/route.ts — the app
--- never uses a service-role key anywhere.
+-- votes (which has zero RLS policies for anon/authenticated — see below).
+-- Called via Supabase RPC with the public anon key from
+-- src/app/api/votes/route.ts — the app never uses a service-role key.
+--
+-- Because it is reachable with the public key, it must not trust its
+-- caller: p_server_secret proves the call comes from our own server, which
+-- is where the voter's country (from the request's IP) and identity hash
+-- are determined. Without it anyone could vote directly with an invented
+-- country and identity.
 create or replace function public.submit_vote(
   p_match_id uuid,
   p_team_id uuid,
   p_country_code text,
-  p_voter_hash text
+  p_voter_hash text,
+  p_server_secret text
 )
 returns public.votes
 language plpgsql
@@ -107,6 +128,14 @@ declare
   v_match public.matches;
   v_row public.votes;
 begin
+  if p_server_secret is null or not exists (
+    select 1 from public.server_secrets
+    where name = 'vote'
+      and secret_hash = encode(sha256(convert_to(p_server_secret, 'UTF8')), 'hex')
+  ) then
+    raise exception 'votes are only accepted from the app server' using errcode = '42501';
+  end if;
+
   select * into v_match from public.matches where id = p_match_id;
 
   if v_match.id is null then
@@ -126,8 +155,7 @@ begin
 
   -- Relies on votes_one_per_match_per_voter to raise 23505
   -- (unique_violation) on a duplicate vote; the API route maps that to
-  -- HTTP 409 (dev-prompt-chatgpt.md "DUPLICATE VOTES": friendly toast,
-  -- never a crash).
+  -- HTTP 409 (friendly message, never a crash).
   insert into public.votes (match_id, team_id, country_code, voter_hash)
   values (p_match_id, p_team_id, upper(p_country_code), p_voter_hash)
   returning * into v_row;
@@ -136,8 +164,8 @@ begin
 end;
 $$;
 
-revoke all on function public.submit_vote(uuid, uuid, text, text) from public;
-grant execute on function public.submit_vote(uuid, uuid, text, text) to anon, authenticated;
+revoke all on function public.submit_vote(uuid, uuid, text, text, text) from public;
+grant execute on function public.submit_vote(uuid, uuid, text, text, text) to anon, authenticated;
 
 -- ROW LEVEL SECURITY --------------------------------------------------------
 -- Public (anon/authenticated) gets read-only access to active content, and

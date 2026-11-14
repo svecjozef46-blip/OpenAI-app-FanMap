@@ -27,17 +27,33 @@ Appka beží na `http://localhost:3000`.
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — z Supabase projektu (Project Settings → API). Appka nikde nepoužíva service-role kľúč — pozri "Databáza" nižšie, prečo to nie je potrebné.
 - `NEXT_PUBLIC_MAPBOX_TOKEN` — verejný (public) Mapbox token.
+- `FANMAP_VOTE_SECRET` — **povinné pre hlasovanie.** Dlhý náhodný reťazec, ktorým server dokazuje databáze, že hlas ide z našej appky. Pozri „Hlasovanie a bezpečnosť“ nižšie.
 - `FANMAP_DEV_COUNTRY` — voliteľné, len pre lokálny vývoj. V produkcii (na Vercel) appka pozná krajinu hlasujúceho automaticky (hlavička `x-vercel-ip-country`), lokálne táto hlavička neexistuje, takže bez tejto premennej by `npm run dev` hlasovanie odmietal s `country_unknown`. Nastav na 2-písmenový kód krajiny, napr. `SK`.
 
 ## Databáza
 
-Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
+Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, `server_secrets`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
 
 Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decisions-log.md`):
 - Tabuľka `votes` nemá pre `anon`/`authenticated` role žiadne RLS politiky — priamy prístup (čítanie aj zápis) je úplne zablokovaný.
 - Hlasovanie ide výhradne cez `public.submit_vote()` Postgres funkciu (`SECURITY DEFINER`), volanú z `src/app/api/votes/route.ts` cez Supabase RPC s verejným anon kľúčom. Preto appka nikde nepotrebuje service-role kľúč.
 - Čítanie výsledkov hlasovania ide cez pohľad `public.match_results` (agregované počty hlasov podľa krajiny, žiadne surové riadky ani `voter_hash`) — jediný spôsob, akým appka číta dáta o hlasoch.
 - Žiadne oficiálne logá klubov (`teams.logo_url` je zámerne `null`) — pozri `docs/idea.md` "trademark caution".
+
+## Hlasovanie a bezpečnosť
+
+Hlas zapisuje databázová funkcia `submit_vote()`. Dá sa zavolať verejným kľúčom, preto neverí volajúcemu: hlas prijme len vtedy, keď dostane **tajný kľúč servera** (`FANMAP_VOTE_SECRET`). Ten pozná iba náš server (`src/app/api/votes/route.ts`), ktorý zároveň sám určuje krajinu hlasujúceho (podľa IP) a jeho identifikátor. Nikto zvonku tak nevie poslať hlas s vymyslenou krajinou alebo identitou.
+
+- V databáze je uložený len odtlačok kľúča (SHA-256) v tabuľke `server_secrets`, nie kľúč samotný.
+- Kľúč musí byť rovnaký v `.env.local` aj vo Verceli (Project → Settings → Environment Variables → `FANMAP_VOTE_SECRET`). **Bez neho hlasovanie na produkcii nefunguje** (appka vráti „Voting is temporarily unavailable“).
+- Kľúč nikdy necommituj ani neposielaj. Ak unikne, vymeň ho:
+  1. Vymysli nový dlhý náhodný reťazec a nastav ho v `.env.local` aj vo Verceli.
+  2. V Supabase SQL Editore spusti (s novým kľúčom):
+     ```sql
+     update public.server_secrets
+     set secret_hash = encode(sha256(convert_to('NOVY_KLUC', 'UTF8')), 'hex')
+     where name = 'vote';
+     ```
 
 ## Testy
 

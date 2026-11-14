@@ -85,37 +85,42 @@ test("vote results are readable only as totals, without voter details", async ()
   }
 });
 
-// submit_vote() is the one database function the public may call.
-const submitVote = (args: object) => supabaseRest("rpc/submit_vote", { method: "POST", body: JSON.stringify(args) });
-
-test("submit_vote refuses a team that isn't playing in the match", async () => {
-  const response = await submitVote({
-    p_match_id: FIXTURE.openMatchId,
-    p_team_id: randomUUID(),
-    p_country_code: "SK",
-    p_voter_hash: `rpc-${randomUUID()}`,
+// submit_vote() can be reached with the public key, but it only records a
+// vote when the caller knows the server secret (FANMAP_VOTE_SECRET) — so a
+// stranger can't call it directly and invent a country or identity.
+const directVote = (extra: object) =>
+  supabaseRest("rpc/submit_vote", {
+    method: "POST",
+    body: JSON.stringify({
+      p_match_id: FIXTURE.openMatchId,
+      p_team_id: FIXTURE.homeTeamId,
+      p_country_code: "BR",
+      p_voter_hash: `rpc-${randomUUID()}`,
+      ...extra,
+    }),
   });
-  assert.equal(response.status, 400);
-  assert.match((await response.json()).message, /not part of this match/);
+
+test("submit_vote cannot be called directly without the server secret", async () => {
+  const response = await directVote({});
+  assert.ok(!response.ok, "a direct vote without the secret must be refused");
 });
 
-test("submit_vote refuses a finished match", async () => {
-  const response = await submitVote({
-    p_match_id: FIXTURE.finishedMatchId,
-    p_team_id: FIXTURE.homeTeamId,
-    p_country_code: "SK",
-    p_voter_hash: `rpc-${randomUUID()}`,
-  });
-  assert.ok(!response.ok);
-  assert.equal((await response.json()).code, "VC001");
+test("submit_vote refuses a wrong or empty server secret", async () => {
+  for (const secret of ["", "guess", "0".repeat(64), null]) {
+    const response = await directVote({ p_server_secret: secret });
+    // 401 for an anonymous caller, 403 for a signed-in one — refused either way.
+    assert.ok([401, 403].includes(response.status), `secret ${JSON.stringify(secret)} must be refused`);
+    assert.equal((await response.json()).code, "42501");
+  }
 });
 
-test("submit_vote refuses a match that doesn't exist", async () => {
-  const response = await submitVote({
-    p_match_id: randomUUID(),
-    p_team_id: FIXTURE.homeTeamId,
-    p_country_code: "SK",
-    p_voter_hash: `rpc-${randomUUID()}`,
-  });
-  assert.equal(response.status, 400);
+test("no direct vote attempt above left a vote behind", async () => {
+  const rows = await (await supabaseRest(`match_results?match_id=eq.${FIXTURE.openMatchId}&country_code=eq.BR`)).json();
+  assert.deepEqual(rows, []);
+});
+
+test("the server secret table is invisible to anonymous visitors", async () => {
+  const response = await supabaseRest("server_secrets?select=*");
+  const rows = response.ok ? await response.json() : [];
+  assert.deepEqual(rows, []);
 });

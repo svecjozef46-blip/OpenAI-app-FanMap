@@ -51,6 +51,15 @@ test("a vote for a team that isn't playing in the match is rejected", async () =
   assert.equal(response.status, 400);
 });
 
+test("a vote on a match that doesn't exist is rejected", async () => {
+  const response = await postVote({
+    matchId: randomUUID(),
+    teamId: FIXTURE.homeTeamId,
+    voterSeed: `test-${randomUUID()}`,
+  });
+  assert.equal(response.status, 400);
+});
+
 test("a malformed request is rejected with a readable message, not a crash", async () => {
   for (const body of ["not json", { matchId: "abc", teamId: "def", voterSeed: "x" }, {}]) {
     const response = await postVote(body);
