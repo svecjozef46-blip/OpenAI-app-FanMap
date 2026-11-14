@@ -1,6 +1,12 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { League, MatchResultRow, MatchTotals, MatchWithTeams } from "@/lib/types";
 
+// Server-side data fetching for pages. When the database can't be reached
+// these functions throw, and app/error.tsx shows visitors a friendly
+// message with a retry button — rather than an empty list that looks like
+// "no matches". (Vote counts are the exception: without them the page still
+// works, so getMatchResultRows() falls back to "no votes".)
+//
 // Server-side data fetching for pages (app/page.tsx, app/match/[matchId]).
 // Runs at request time on the server, which is also what makes correct
 // per-match OG preview tags possible (generateMetadata in
@@ -39,10 +45,7 @@ export async function getVisibleMatches(leagueId?: string): Promise<MatchWithTea
   if (leagueId) query = query.eq("league_id", leagueId);
   const { data, error } = await query;
 
-  if (error) {
-    console.error("Failed to load matches:", error);
-    return [];
-  }
+  if (error) throw new Error(`Failed to load matches: ${error.message}`);
   const matches = (data ?? []).map((row) => normalizeMatch(row as unknown as RawMatchRow));
   // What people can still vote on comes first: live, then upcoming (soonest
   // first), then finished matches (most recent first).
@@ -75,10 +78,7 @@ const LEAGUE_ORDER = [
 export async function getActiveLeagues(): Promise<League[]> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("leagues").select("*").order("name");
-  if (error) {
-    console.error("Failed to load leagues:", error);
-    return [];
-  }
+  if (error) throw new Error(`Failed to load leagues: ${error.message}`);
   const rank = (slug: string) => {
     const i = LEAGUE_ORDER.indexOf(slug);
     return i === -1 ? LEAGUE_ORDER.length : i;
@@ -89,7 +89,7 @@ export async function getActiveLeagues(): Promise<League[]> {
 export async function getLeagueBySlug(slug: string): Promise<League | null> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase.from("leagues").select("*").eq("slug", slug).maybeSingle();
-  if (error) console.error("Failed to load league:", error);
+  if (error) throw new Error(`Failed to load league: ${error.message}`);
   return data ?? null;
 }
 
@@ -131,9 +131,8 @@ export async function getMatchById(matchId: string): Promise<MatchWithTeams | nu
     .eq("id", matchId)
     .maybeSingle();
 
-  if (error || !data) {
-    if (error) console.error("Failed to load match:", error);
-    return null;
-  }
+  // A malformed id (not a UUID) is simply "no such match", not an outage.
+  if (error && error.code !== "22P02") throw new Error(`Failed to load match: ${error.message}`);
+  if (error || !data) return null;
   return normalizeMatch(data as unknown as RawMatchRow);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { CountryResult, MatchWithTeams } from "@/lib/types";
@@ -48,6 +48,11 @@ export function GlobalMap({
   results: CountryResult[];
 }) {
   const theme = useTheme();
+  // "loading" until Mapbox has drawn the world; "error" if it can't start
+  // (missing token, blocked network, WebGL unavailable).
+  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">(
+    process.env.NEXT_PUBLIC_MAPBOX_TOKEN ? "loading" : "error"
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const loadedRef = useRef(false);
@@ -125,6 +130,15 @@ export function GlobalMap({
       addCountryLayers(map, { beforeId, withHover: true });
       loadedRef.current = true;
       applyResults();
+      setMapStatus("ready");
+    });
+
+    // Mapbox reports many harmless errors (a single tile timing out); only
+    // a failure before the first successful load means "no map".
+    map.on("error", (event) => {
+      if (loadedRef.current) return;
+      console.error("Map failed to load:", event.error);
+      setMapStatus("error");
     });
 
     // Hover: outline + tooltip (styled in globals.css, .fanmap-popup).
@@ -228,5 +242,23 @@ export function GlobalMap({
     applyResultsRef.current?.();
   }, [match.id, results, theme]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {mapStatus !== "ready" && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center">
+          {mapStatus === "loading" ? (
+            <p role="status" className="text-sm text-muted motion-safe:animate-pulse">
+              Loading the map…
+            </p>
+          ) : (
+            <p role="alert" className="max-w-xs text-sm text-muted">
+              The map couldn&apos;t load. You can still vote in the match list — try reloading the page to see the
+              map.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
