@@ -33,6 +33,12 @@ export function useKickoffLabel(iso: string): string {
   );
 }
 
+// Voting is open before and during a match only. The database enforces
+// this (submit_vote()); the UI uses it to explain why buttons are off.
+export function isVotingClosed(status: string): boolean {
+  return status === "finished" || status === "archived";
+}
+
 // Percent split that always adds up to 100. With zero votes it returns
 // 50/50 and `isEmpty`, so the UI can show a neutral placeholder instead of
 // pretending there's real support.

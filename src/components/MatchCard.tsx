@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { MatchTotals, MatchWithTeams, Team } from "@/lib/types";
 import { TeamBadge } from "@/components/TeamBadge";
 import { SupportBar } from "@/components/SupportBar";
-import { splitPercent, useKickoffLabel } from "@/lib/format";
+import { isVotingClosed, splitPercent, useKickoffLabel } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
 import { useVote } from "@/lib/useVote";
@@ -42,13 +42,16 @@ export function MatchCard({
   const { status, errorMessage, myVoteTeamId, vote } = useVote(match.id, () => onSelect(match.id));
   const kickoff = useKickoffLabel(match.kickoff_at);
   const { homePct, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
-  const canVote = myVoteTeamId === null && status !== "pending" && match.status !== "archived";
+  const isClosed = isVotingClosed(match.status);
+  const canVote = myVoteTeamId === null && status !== "pending" && !isClosed;
+  const split = isEmpty ? "no votes" : `${homePct}% · ${100 - homePct}%`;
   const matchStatus = STATUS[match.status];
 
   let note: { text: string; isError: boolean };
   if (status === "pending") note = { text: "Saving…", isError: false };
   else if (status === "duplicate") note = { text: "Already counted from this device", isError: false };
   else if (status === "error") note = { text: errorMessage ?? "Couldn't save — try again", isError: true };
+  else if (isClosed) note = { text: `Voting closed · ${isEmpty ? "no votes" : `final ${split}`}`, isError: false };
   else if (myVoteTeamId === null) note = { text: "Tap the team you support", isError: false };
   else note = { text: isEmpty ? "No votes yet" : `${homePct}% · ${100 - homePct}%`, isError: false };
 
@@ -73,6 +76,7 @@ export function MatchCard({
           isMine={myVoteTeamId === match.home_team_id}
           dimmed={myVoteTeamId !== null && myVoteTeamId !== match.home_team_id}
           disabled={!canVote}
+          closed={isClosed}
           onVote={() => vote(match.home_team_id)}
         />
         <span className="text-xs text-faint">vs</span>
@@ -82,6 +86,7 @@ export function MatchCard({
           isMine={myVoteTeamId === match.away_team_id}
           dimmed={myVoteTeamId !== null && myVoteTeamId !== match.away_team_id}
           disabled={!canVote}
+          closed={isClosed}
           onVote={() => vote(match.away_team_id)}
         />
       </div>
@@ -170,6 +175,7 @@ function SupportButton({
   isMine,
   dimmed,
   disabled,
+  closed,
   onVote,
 }: {
   team: Team;
@@ -177,19 +183,25 @@ function SupportButton({
   isMine: boolean;
   dimmed: boolean;
   disabled: boolean;
+  closed: boolean;
   onVote: () => void;
 }) {
+  const label = isMine
+    ? `You ${closed ? "supported" : "support"} ${team.name}`
+    : closed
+      ? `${team.name} — voting closed`
+      : `Support ${team.name}`;
   return (
     <button
       type="button"
       onClick={onVote}
       disabled={disabled}
       aria-pressed={isMine}
-      aria-label={isMine ? `You support ${team.name}` : `Support ${team.name}`}
-      title={isMine ? undefined : `Support ${team.name}`}
+      aria-label={label}
+      title={label}
       className={`group flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-1.5 transition-all duration-200 ${
         side === "away" ? "flex-row-reverse text-right" : "text-left"
-      } ${isMine ? "border-accent bg-accent/10" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
+      } ${isMine ? "border-accent bg-accent/10" : closed ? "border-transparent bg-transparent" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
         disabled ? "cursor-default" : "cursor-pointer hover:border-fg/30 hover:bg-bg"
       } focus-visible:outline-2 focus-visible:outline-accent`}
     >

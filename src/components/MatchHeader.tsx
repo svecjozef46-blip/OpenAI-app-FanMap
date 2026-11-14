@@ -5,7 +5,7 @@ import { TeamBadge } from "@/components/TeamBadge";
 import { SupportBar } from "@/components/SupportBar";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { CheckIcon } from "@/components/MatchCard";
-import { splitPercent } from "@/lib/format";
+import { isVotingClosed, splitPercent } from "@/lib/format";
 import { hexToRgba } from "@/lib/mapSetup";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
@@ -43,9 +43,14 @@ export function MatchHeader({
         : null;
 
   // `short` is shown on phones, where the space under the bar is narrow.
-  const message = supportedTeam
-    ? { text: `You support ${supportedTeam.short_name}`, short: "Your team ✓", good: true }
-    : isEmpty
+  const isClosed = isVotingClosed(match.status);
+  const message = isClosed
+    ? supportedTeam
+      ? { text: `Voting closed · you supported ${supportedTeam.short_name}`, short: "Voting closed", good: true }
+      : { text: "Voting closed · final result", short: "Voting closed", good: false }
+    : supportedTeam
+      ? { text: `You support ${supportedTeam.short_name}`, short: "Your team ✓", good: true }
+      : isEmpty
       ? { text: "No votes yet — vote in the match list", short: "No votes yet", good: false }
       : { text: "Vote for your team in the match list", short: "Vote in the list", good: false };
 

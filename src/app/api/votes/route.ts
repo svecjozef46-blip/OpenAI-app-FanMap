@@ -63,7 +63,10 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "invalid_request", message: "Something went wrong sending your vote. Please reload the page and try again." },
+      { status: 400 }
+    );
   }
 
   const { matchId, teamId, voterSeed } = body;
@@ -76,7 +79,10 @@ export async function POST(request: NextRequest) {
     typeof voterSeed !== "string" ||
     voterSeed.length < 8
   ) {
-    return NextResponse.json({ error: "Invalid vote payload" }, { status: 400 });
+    return NextResponse.json(
+      { error: "invalid_request", message: "Something went wrong sending your vote. Please reload the page and try again." },
+      { status: 400 }
+    );
   }
 
   const countryCode = getVoterCountry(request);
@@ -84,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Only expected locally without FANMAP_DEV_COUNTRY set — see
     // getVoterCountry() above.
     return NextResponse.json(
-      { error: "country_unknown", message: "Could not determine your country." },
+      { error: "country_unknown", message: "We couldn't tell which country you're in, so your vote can't be counted." },
       { status: 400 }
     );
   }
@@ -112,8 +118,19 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+    // VC001 = our own "voting closed" code, raised by submit_vote() when
+    // the match is finished or archived (see docs/schema.sql).
+    if (error.code === "VC001") {
+      return NextResponse.json(
+        { error: "voting_closed", message: "Voting for this match has closed." },
+        { status: 403 }
+      );
+    }
     console.error("submit_vote failed:", error);
-    return NextResponse.json({ error: "vote_failed" }, { status: 400 });
+    return NextResponse.json(
+      { error: "vote_failed", message: "We couldn't count your vote. Please try again." },
+      { status: 400 }
+    );
   }
 
   return NextResponse.json({ vote: data }, { status: 201 });

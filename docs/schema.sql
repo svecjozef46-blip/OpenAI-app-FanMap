@@ -113,8 +113,11 @@ begin
     raise exception 'match not found' using errcode = '22023';
   end if;
 
-  if v_match.status = 'archived' then
-    raise exception 'match is archived and no longer accepts votes' using errcode = '22023';
+  -- Voting is open only before and during a match. VC001 is our own code
+  -- ("voting closed") so the API can tell this apart from invalid input
+  -- and answer with a clear message (src/app/api/votes/route.ts).
+  if v_match.status in ('finished', 'archived') then
+    raise exception 'voting is closed for this match' using errcode = 'VC001';
   end if;
 
   if p_team_id <> v_match.home_team_id and p_team_id <> v_match.away_team_id then

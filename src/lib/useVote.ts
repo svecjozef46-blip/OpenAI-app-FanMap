@@ -59,6 +59,8 @@ export function useVote(matchId: string, onVoted?: () => void) {
       setStatus("voted");
       onVoted?.();
     } catch {
+      // No response at all: offline or the server is unreachable.
+      setErrorMessage("No connection — check your internet and try again.");
       setStatus("error");
     }
   }
