@@ -28,6 +28,11 @@ export const metadata: Metadata = {
     template: "%s",
   },
   description: "Show which team you support and see which countries stand with you.",
+  // Name used when the site is installed to a phone's home screen (see
+  // app/manifest.ts). Icons and the manifest link are added by Next.js from
+  // the files in app/ (favicon.ico, icon.svg, apple-icon.png, manifest.ts).
+  applicationName: "Fanzo",
+  appleWebApp: { capable: true, title: "Fanzo", statusBarStyle: "black-translucent" },
 };
 
 // Browser chrome (address bar on phones) matches the page in both modes.
