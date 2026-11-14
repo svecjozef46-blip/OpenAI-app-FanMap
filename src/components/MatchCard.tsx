@@ -52,7 +52,7 @@ export function MatchCard({
   else if (status === "duplicate") note = { text: "Already counted from this device", isError: false };
   else if (status === "error") note = { text: errorMessage ?? "Couldn't save — try again", isError: true };
   else if (isClosed) note = { text: `Voting closed · ${isEmpty ? "no votes" : `final ${split}`}`, isError: false };
-  else if (myVoteTeamId === null) note = { text: "Tap the team you support", isError: false };
+  else if (myVoteTeamId === null) note = { text: isEmpty ? "Tap the team you support" : `${split} · tap your team`, isError: false };
   else note = { text: isEmpty ? "No votes yet" : `${homePct}% · ${100 - homePct}%`, isError: false };
 
   return (
