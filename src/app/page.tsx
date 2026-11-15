@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { getActiveLeagues, getMatchResultRows, getMatchTotals, getVisibleMatches } from "@/lib/queries";
+import {
+  getActiveLeagues,
+  getMatchResultRows,
+  getMatchTotals,
+  getNextRoundKickoff,
+  getVisibleMatches,
+} from "@/lib/queries";
+import { formatRoundStart } from "@/lib/week";
 import { pickDefaultMatch } from "@/lib/matchPage";
 import { buildCountryResults } from "@/lib/results";
 import { illustrativeHeroCountries, MIN_REAL_COUNTRIES_FOR_HERO } from "@/lib/heroPreview";
@@ -74,9 +81,12 @@ export default async function HomePage() {
   const showcaseIds = new Set(showcaseMatches.map((m) => m.id));
   const cardMatches = [...showcaseMatches, ...upcoming.filter((m) => !showcaseIds.has(m.id))].slice(0, MAX_CARDS);
 
-  const [rows, totals] = await Promise.all([
+  const [rows, totals, nextRoundKickoff] = await Promise.all([
     getMatchResultRows(showcaseMatches.map((m) => m.id)),
     getMatchTotals(cardMatches),
+    // Lists show only this week (lib/week.ts); on an empty week, say when
+    // the next round starts instead of showing nothing.
+    matches.length === 0 ? getNextRoundKickoff() : null,
   ]);
   const showcase = showcaseMatches.map((m) => showcaseItem(m, rows));
   const leagueName = new Map(leagues.map((l) => [l.id, l.name]));
@@ -96,7 +106,11 @@ export default async function HomePage() {
             <h1 className="font-display text-[clamp(2.4rem,6vw,4.5rem)] uppercase leading-[0.92] tracking-[-0.02em]">
               The world is taking sides.
             </h1>
-            <p className="mt-5 text-lg text-muted">New matches are on their way.</p>
+            <p className="mt-5 text-lg text-muted">
+              {nextRoundKickoff
+                ? `No matches this week. The next round starts ${formatRoundStart(nextRoundKickoff)}.`
+                : "New matches are on their way."}
+            </p>
           </section>
         )}
 

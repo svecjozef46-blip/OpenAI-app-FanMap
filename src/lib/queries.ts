@@ -1,4 +1,6 @@
+import { connection } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { weekRange } from "@/lib/week";
 import type { League, MatchResultRow, MatchTotals, MatchWithTeams } from "@/lib/types";
 
 // Server-side data fetching for pages. When the database can't be reached
@@ -40,13 +42,30 @@ function normalizeMatch(row: RawMatchRow): MatchWithTeams {
   };
 }
 
-// Non-archived matches (RLS hides archived ones), soonest kickoff first,
-// optionally limited to one league. Matches are visible via RLS even if a
-// team happens to be inactive (is_active only gates leagues/teams
-// themselves) — fine for MVP scope.
+// The current match week (lib/week.ts). `connection()` tells Next.js this
+// depends on the moment of the request, so it is never baked into a
+// prerendered page (Next.js 16 refuses `new Date()` during prerendering).
+export async function getCurrentWeek(): Promise<{ start: Date; end: Date }> {
+  await connection();
+  return weekRange(new Date());
+}
+
+// This week's matches (Monday to Sunday, Bratislava time — lib/week.ts),
+// optionally limited to one league. Matches of earlier weeks are reachable
+// only by their direct link, and next week's matches (often added in
+// advance) stay hidden until their week starts — so an old round never
+// mixes with a new one. Archived matches are hidden by RLS anyway.
+// Matches are visible via RLS even if a team happens to be inactive
+// (is_active only gates leagues/teams themselves) — fine for MVP scope.
 export async function getVisibleMatches(leagueId?: string): Promise<MatchWithTeams[]> {
+  const week = await getCurrentWeek();
   const supabase = createServerSupabaseClient();
-  let query = supabase.from("matches").select(MATCH_SELECT).order("kickoff_at", { ascending: true });
+  let query = supabase
+    .from("matches")
+    .select(MATCH_SELECT)
+    .gte("kickoff_at", week.start.toISOString())
+    .lt("kickoff_at", week.end.toISOString())
+    .order("kickoff_at", { ascending: true });
   if (leagueId) query = query.eq("league_id", leagueId);
   const { data, error } = await query;
 
@@ -60,6 +79,28 @@ export async function getVisibleMatches(leagueId?: string): Promise<MatchWithTea
     const diff = new Date(x.kickoff_at).getTime() - new Date(y.kickoff_at).getTime();
     return rank(x) === 2 ? -diff : diff;
   });
+}
+
+// Kickoff of the first match after this week (optionally in one league),
+// for the "next round starts …" line when this week has no matches. Only
+// the date is shown, never next week's match list.
+export async function getNextRoundKickoff(leagueId?: string): Promise<string | null> {
+  const week = await getCurrentWeek();
+  const supabase = createServerSupabaseClient();
+  let query = supabase
+    .from("matches")
+    .select("kickoff_at, league:leagues!inner(id)")
+    .gte("kickoff_at", week.end.toISOString())
+    .order("kickoff_at", { ascending: true })
+    .limit(1);
+  if (leagueId) query = query.eq("league_id", leagueId);
+  const { data, error } = await query;
+  if (error) {
+    // Only a nicety on an empty page — never worth an error screen.
+    console.error("Failed to load next round:", error);
+    return null;
+  }
+  return data?.[0]?.kickoff_at ?? null;
 }
 
 // Order of the league tabs in the top navigation: the big five domestic

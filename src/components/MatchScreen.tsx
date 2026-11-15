@@ -1,10 +1,12 @@
 import Link from "next/link";
 import type { League, MatchTotals, MatchWithTeams } from "@/lib/types";
+import { formatRoundStart } from "@/lib/week";
 import { SiteNav } from "@/components/SiteNav";
 import { MatchExperience } from "@/components/MatchExperience";
 
 // Page frame for every match screen: top navigation + the match experience,
-// or a friendly empty state when a league has no matches yet.
+// or a friendly empty state when there are no matches this week (lists show
+// only the current week — lib/week.ts).
 export function MatchScreen({
   leagues,
   active,
@@ -12,6 +14,7 @@ export function MatchScreen({
   matches,
   totals,
   selectedMatchId,
+  nextRoundKickoff = null,
 }: {
   leagues: League[];
   active: string;
@@ -19,7 +22,10 @@ export function MatchScreen({
   matches: MatchWithTeams[];
   totals: Record<string, MatchTotals>;
   selectedMatchId: string | undefined;
+  // First kickoff after this week, shown when this week is empty.
+  nextRoundKickoff?: string | null;
 }) {
+  const isAll = active === "all";
   return (
     <div className="flex h-full flex-col">
       <SiteNav leagues={leagues} active={active} />
@@ -33,16 +39,22 @@ export function MatchScreen({
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-            <p className="text-2xl font-semibold tracking-tight">No matches in {title} yet</p>
-            <p className="max-w-sm text-muted">
-              New fixtures are added regularly. Meanwhile, see what&apos;s on in other competitions.
+            <p className="text-2xl font-semibold tracking-tight">
+              {isAll ? "No matches this week" : `No ${title} matches this week`}
             </p>
-            <Link
-              href="/matches"
-              className="mt-3 rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-bg transition-opacity hover:opacity-85"
-            >
-              Browse all matches
-            </Link>
+            <p className="max-w-sm text-muted">
+              {nextRoundKickoff
+                ? `The next round starts ${formatRoundStart(nextRoundKickoff)}. Come back then to back your team.`
+                : "New fixtures are added regularly. Check back soon."}
+            </p>
+            {!isAll && (
+              <Link
+                href="/matches"
+                className="mt-3 rounded-full bg-fg px-5 py-2.5 text-sm font-medium text-bg transition-opacity hover:opacity-85"
+              >
+                See all of this week&apos;s matches
+              </Link>
+            )}
           </div>
         )}
       </main>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getVisibleMatches } from "@/lib/queries";
+import { getNextRoundKickoff, getVisibleMatches } from "@/lib/queries";
 import { loadMatchScreenData, pickDefaultMatch } from "@/lib/matchPage";
 import { MatchScreen } from "@/components/MatchScreen";
 
@@ -8,13 +8,16 @@ import { MatchScreen } from "@/components/MatchScreen";
 export const instant = false;
 
 export const metadata: Metadata = {
-  title: "All matches — Global Fan Map",
+  title: "This week's matches — Global Fan Map",
   description: "Pick a match and see which countries support each team.",
 };
 
 export default async function AllMatchesPage() {
   const matches = await getVisibleMatches();
-  const { leagues, totals } = await loadMatchScreenData(matches);
+  const [{ leagues, totals }, nextRoundKickoff] = await Promise.all([
+    loadMatchScreenData(matches),
+    matches.length === 0 ? getNextRoundKickoff() : null,
+  ]);
 
   return (
     <MatchScreen
@@ -24,6 +27,7 @@ export default async function AllMatchesPage() {
       matches={matches}
       totals={totals}
       selectedMatchId={pickDefaultMatch(matches)?.id}
+      nextRoundKickoff={nextRoundKickoff}
     />
   );
 }

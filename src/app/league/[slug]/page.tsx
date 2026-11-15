@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getLeagueBySlug, getVisibleMatches } from "@/lib/queries";
+import { getLeagueBySlug, getNextRoundKickoff, getVisibleMatches } from "@/lib/queries";
 import { loadMatchScreenData, pickDefaultMatch } from "@/lib/matchPage";
 import { MatchScreen } from "@/components/MatchScreen";
 
@@ -23,7 +23,10 @@ export default async function LeaguePage({ params }: PageProps<"/league/[slug]">
   if (!league) notFound();
 
   const matches = await getVisibleMatches(league.id);
-  const { leagues, totals } = await loadMatchScreenData(matches);
+  const [{ leagues, totals }, nextRoundKickoff] = await Promise.all([
+    loadMatchScreenData(matches),
+    matches.length === 0 ? getNextRoundKickoff(league.id) : null,
+  ]);
 
   return (
     <MatchScreen
@@ -33,6 +36,7 @@ export default async function LeaguePage({ params }: PageProps<"/league/[slug]">
       matches={matches}
       totals={totals}
       selectedMatchId={pickDefaultMatch(matches)?.id}
+      nextRoundKickoff={nextRoundKickoff}
     />
   );
 }
