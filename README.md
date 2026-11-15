@@ -33,13 +33,27 @@ Appka beží na `http://localhost:3000`.
 
 ## Databáza
 
-Schéma (tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, `server_secrets`, `vote_attempts`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
+Schéma (funkcie `rotate_matches()`, `match_status_at()`, `week_start()` a naplánovaná úloha pg_cron; tabuľky `leagues`, `teams`, `matches`, `votes`, `feedback`, `admin_users`, `server_secrets`, `vote_attempts`, pohľad `match_results`, funkcia `submit_vote()`, RLS politiky) **nie je v tomto repe ako migračné súbory** — bola aplikovaná priamo cez Supabase MCP pripojenie počas vývoja. Kompletný, okomentovaný SQL záznam toho, čo je aktuálne live v databáze (vrátane dôvodov jednotlivých rozhodnutí), je v `docs/schema.sql` — ak budeš niekedy potrebovať schému znova vytvoriť (nový Supabase projekt, CI, atď.), tento súbor je zdroj pravdy; zváž jeho presunutie do `supabase/migrations/` ako prvý krok, ak pribudne tím alebo CI pipeline. Kontext a história rozhodnutí (prečo je to takto, nie len čo) je v `docs/decisions-log.md` pod dátumom 2026-10-19.
 
 Kľúčové body dizajnu databázy (dôvody v `docs/schema.sql` a `docs/decisions-log.md`):
 - Tabuľka `votes` nemá pre `anon`/`authenticated` role žiadne RLS politiky — priamy prístup (čítanie aj zápis) je úplne zablokovaný.
 - Hlasovanie ide výhradne cez `public.submit_vote()` Postgres funkciu (`SECURITY DEFINER`), volanú z `src/app/api/votes/route.ts` cez Supabase RPC s verejným anon kľúčom. Preto appka nikde nepotrebuje service-role kľúč.
 - Čítanie výsledkov hlasovania ide cez pohľad `public.match_results` (agregované počty hlasov podľa krajiny, žiadne surové riadky ani `voter_hash`) — jediný spôsob, akým appka číta dáta o hlasoch.
 - Žiadne oficiálne logá klubov (`teams.logo_url` je zámerne `null`) — pozri `docs/idea.md` "trademark caution".
+
+## Týždenný cyklus zápasov
+
+Web ukazuje vždy len zápasy **aktuálneho týždňa**: od pondelka 00:00 do nedele 24:00 v čase Europe/Bratislava (zmenu letného/zimného času rieši správne). Definícia týždňa je na jednom mieste, v `src/lib/week.ts`, a rovnaká je v databáze vo funkcii `week_start()`.
+
+- **Zoznamy** (úvodná stránka, ligy, `/matches`) ukazujú len zápasy tohto týždňa. Zápasy budúceho týždňa môžeš v admine nahrať kedykoľvek vopred; na webe sa objavia až v pondelok. Keď tento týždeň nie je žiadny zápas, stránka napíše, kedy začína ďalšie kolo.
+- **Priamy odkaz** `/match/[id]` na zápas z minulého týždňa funguje ďalej, ale zápas sa zobrazí samostatne (mapa a konečný výsledok, bez zoznamu ďalších zápasov) s tlačidlom na aktuálne zápasy.
+- **Stavy zápasov sa menia samy** (databázová funkcia `rotate_matches()`, spúšťa ju pg_cron každých 5 minút):
+  - `upcoming` → `live` vo chvíli výkopu,
+  - → `finished` 2 h 30 min po výkope (hlasovanie sa uzavrie),
+  - → `archived`, keď je výkop pred začiatkom minulého týždňa. Zápas z týždňa N je teda cez odkaz dostupný celý týždeň N+1, potom zmizne.
+- Nič sa nemaže a stav ide len dopredu. Ak v admine ukončíš zápas skôr, ostane ukončený.
+- **Odložený zápas:** v admine mu zmeň čas výkopu skôr, než pôvodný termín nastane, inak ho cron prepne na `live` a potom `finished`.
+- Kontrola, či cron beží (Supabase → SQL Editor): `select * from cron.job_run_details order by start_time desc limit 5;`
 
 ## Hlasovanie a bezpečnosť
 
@@ -111,14 +125,14 @@ Ako to funguje:
 - `src/proxy.ts` — pri každej `/admin` požiadavke obnoví session cookie (štandardné `@supabase/ssr` nastavenie). Nie je to bezpečnostná kontrola.
 - `src/lib/admin/auth.ts` → `requireAdmin()` — jediná brána: prihlásený používateľ **a** záznam v `admin_users`. Volá ju každá admin stránka aj každá Server Action (`src/app/admin/(panel)/actions.ts`).
 - Databáza to vynucuje znova cez RLS (`is_admin()`), takže aj chyba v app kóde by nedovolila zápis ne-adminovi.
-- Nič sa nemaže: zápas sa **archivuje** (skryje sa z verejnej stránky, zastaví hlasovanie, hlasy ostanú), liga/tím sa **deaktivuje**.
+- Nič sa nemaže: zápas sa **archivuje** (skryje sa z verejnej stránky, zastaví hlasovanie, hlasy ostanú), liga/tím sa **deaktivuje**. Stavy `live`, `finished` aj archiváciu starých zápasov robí databáza sama (pozri „Týždenný cyklus zápasov“), ručne ich meniť netreba.
 - Čas výkopu sa zadáva v **UTC** (dôvod v `src/lib/admin/form.ts`).
 
 ## Architektúra appky (stručne)
 
 Stránky (`src/app/`, server-side, naťahujú dáta priamo z DB):
 - `/` — landing page: mapa sveta cez celú obrazovku, ktorá sa strieda medzi zápasmi označenými v admine ako **Featured** (`HeroShowcase` + `HeroMap`), veľké zápasy a „ako to funguje“.
-- `/league/[slug]`, `/match/[matchId]` (a `/matches` = všetky ligy, nie je v menu) — obrazovka zápasu (`MatchScreen` → `MatchExperience`). Horná navigácia (`SiteNav`) sa generuje z aktívnych líg v DB, poradie líg je v `LEAGUE_ORDER` v `src/lib/queries.ts`.
+- `/league/[slug]`, `/match/[matchId]` (a `/matches` = všetky ligy, nie je v menu) — obrazovka zápasu (`MatchScreen` → `MatchExperience`). Zoznamy obsahujú len zápasy aktuálneho týždňa; zápas z minulého týždňa otvorený cez odkaz sa zobrazí samostatne (`pastMatchHref` v `MatchExperience`). Horná navigácia (`SiteNav`) sa generuje z aktívnych líg v DB, poradie líg je v `LEAGUE_ORDER` v `src/lib/queries.ts`.
 
 Kľúčové komponenty (`src/components/`):
 - `MatchExperience.tsx` — vlastník stavu `selectedMatchId`. Zoznam zápasov, hlavička aj mapa sa pri prepnutí zápasu nikdy neremountujú, menia sa len props.
