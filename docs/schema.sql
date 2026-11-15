@@ -236,6 +236,85 @@ $$;
 revoke all on function public.register_vote_attempt(text, text) from public;
 grant execute on function public.register_vote_attempt(text, text) to anon, authenticated;
 
+-- MATCH WEEK AND AUTOMATIC STATUS CHANGES -----------------------------------
+-- A match week runs from Monday 00:00 to the next Monday 00:00 in Bratislava
+-- time — the same definition as src/lib/week.ts (tests/week.test.ts checks
+-- that both agree, including around clock changes). Lists on the site show
+-- only the current week; rotate_matches() below moves every match through
+-- its life on its own, every 5 minutes, so nobody has to do it in /admin.
+
+-- Monday 00:00 (Bratislava) of the week that contains p_at. date_trunc on
+-- the local time, then back to an absolute moment, so summer time is right.
+-- A pure calculation (reads no table), so the public may call it; the
+-- automated tests use it to compare with src/lib/week.ts.
+create or replace function public.week_start(p_at timestamptz)
+returns timestamptz
+language sql
+stable
+set search_path = ''
+as $$
+  select date_trunc('week', p_at at time zone 'Europe/Bratislava') at time zone 'Europe/Bratislava';
+$$;
+
+-- The status a match should have at moment p_now. Only ever moves forward:
+--   upcoming -> live      once kickoff has passed
+--   upcoming/live -> finished   2 h 30 min after kickoff (voting closes)
+--   any -> archived       kickoff before the start of LAST week, so a
+--                         match of week N stays reachable by its link
+--                         through week N+1, then disappears (RLS).
+-- A match an admin finished early stays finished. Pure calculation like
+-- week_start(), callable by the public so the tests can check every rule.
+create or replace function public.match_status_at(p_status text, p_kickoff timestamptz, p_now timestamptz)
+returns text
+language sql
+stable
+set search_path = ''
+as $$
+  select case
+    when p_status = 'archived' then 'archived'
+    -- Start of last week = week_start of a moment one day before this
+    -- week's Monday (not "minus 7 days", which is off by an hour in the
+    -- week of a clock change).
+    when p_kickoff < public.week_start(public.week_start(p_now) - interval '1 day') then 'archived'
+    when p_status in ('upcoming', 'live') and p_kickoff + interval '2 hours 30 minutes' <= p_now then 'finished'
+    when p_status = 'upcoming' and p_kickoff <= p_now then 'live'
+    else p_status
+  end;
+$$;
+
+-- Applies match_status_at() to every match that needs a change. Idempotent
+-- (a second run changes nothing) and never deletes anything. Returns how
+-- many matches changed. Run by pg_cron every 5 minutes (below); the public
+-- and signed-in users can't call it.
+create or replace function public.rotate_matches()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_now timestamptz := now();
+  v_changed integer;
+begin
+  update public.matches m
+  set status = public.match_status_at(m.status, m.kickoff_at, v_now)
+  where m.status <> public.match_status_at(m.status, m.kickoff_at, v_now);
+  get diagnostics v_changed = row_count;
+  return v_changed;
+end;
+$$;
+
+revoke all on function public.week_start(timestamptz) from public;
+grant execute on function public.week_start(timestamptz) to anon, authenticated;
+revoke all on function public.match_status_at(text, timestamptz, timestamptz) from public;
+grant execute on function public.match_status_at(text, timestamptz, timestamptz) to anon, authenticated;
+revoke all on function public.rotate_matches() from public, anon, authenticated;
+
+-- Every 5 minutes. cron.schedule() with a job name replaces an existing job
+-- of the same name, so running this again is safe.
+create extension if not exists pg_cron;
+select cron.schedule('rotate-matches', '*/5 * * * *', 'select public.rotate_matches()');
+
 -- ROW LEVEL SECURITY --------------------------------------------------------
 -- Public (anon/authenticated) gets read-only access to active content, and
 -- NO direct write access anywhere. Writes to leagues/teams/matches happen

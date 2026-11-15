@@ -30,7 +30,9 @@ test("switching to the other team after voting is rejected too", async () => {
   assert.equal(response.status, 409);
 });
 
-test("a vote on a finished match is rejected with a clear message", async () => {
+// The fixture match from 2020 is finished — or archived, once
+// rotate_matches() has run; either way voting on it is closed.
+test("a vote on a finished or archived match is rejected with a clear message", async () => {
   const response = await postVote({
     matchId: FIXTURE.finishedMatchId,
     teamId: FIXTURE.homeTeamId,
