@@ -24,9 +24,13 @@ import { useMyVoteForMatch } from "@/lib/voter";
 export function MatchHeader({
   match,
   results,
+  forceClosed = false,
 }: {
   match: MatchWithTeams;
   results: CountryResult[];
+  // A match from an earlier week is shown as closed even if its status
+  // hasn't been updated yet (it can't be voted on from that page anyway).
+  forceClosed?: boolean;
 }) {
   const myVoteTeamId = useMyVoteForMatch(match.id);
   const colors = getMatchColors(match, useTheme());
@@ -43,11 +47,13 @@ export function MatchHeader({
         : null;
 
   // `short` is shown on phones, where the space under the bar is narrow.
-  const isClosed = isVotingClosed(match.status);
+  const isClosed = forceClosed || isVotingClosed(match.status);
   const message = isClosed
-    ? supportedTeam
-      ? { text: `Voting closed · you supported ${supportedTeam.short_name}`, short: "Voting closed", good: true }
-      : { text: "Voting closed · final result", short: "Voting closed", good: false }
+    ? {
+        text: isEmpty ? "Voting closed · no votes" : `Voting closed · final ${homePct}% · ${awayPct}%`,
+        short: "Voting closed",
+        good: supportedTeam !== null,
+      }
     : supportedTeam
       ? { text: `You support ${supportedTeam.short_name}`, short: "Your team ✓", good: true }
       : isEmpty

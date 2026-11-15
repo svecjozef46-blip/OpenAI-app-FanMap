@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import type { MatchTotals, MatchWithTeams } from "@/lib/types";
 import { MatchCard } from "@/components/MatchCard";
@@ -20,17 +21,25 @@ import { useMatchResults } from "@/lib/useMatchResults";
 //
 // Layout: desktop = sidebar | map (header and insights float over the
 // map). Mobile = header, map, then the match list below, page scrolls.
+//
+// `pastMatchHref` switches to the single-match view used for a match from
+// an earlier week (opened from an old shared link): just that match, its
+// map and final result, no match list (old and new rounds never mix), and
+// a button to this week's matches. No vote buttons exist in this view.
 export function MatchExperience({
   title,
   matches,
   totals,
   initialSelectedMatchId,
+  pastMatchHref,
 }: {
   title: string;
   matches: MatchWithTeams[];
   totals: Record<string, MatchTotals>;
   initialSelectedMatchId: string;
+  pastMatchHref?: string;
 }) {
+  const isSingle = pastMatchHref !== undefined;
   const [selectedMatchId, setSelectedMatchId] = useState(initialSelectedMatchId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // The scrolling container on phones (map on top, list below).
@@ -107,7 +116,7 @@ export function MatchExperience({
   return (
     <div ref={scrollRef} className="flex h-full min-h-0 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
       {/* Desktop sidebar */}
-      {sidebarOpen && (
+      {sidebarOpen && !isSingle && (
         <nav
           aria-label="Matches"
           className="hidden w-80 shrink-0 overflow-y-auto border-r border-line bg-bg p-3 md:block"
@@ -119,22 +128,34 @@ export function MatchExperience({
       <section className="relative flex min-w-0 flex-1 flex-col md:min-h-0" aria-label="Fan map">
         <div className="z-10 p-2 md:absolute md:inset-x-4 md:top-4 md:p-0">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen((open) => !open)}
-              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-glass text-muted shadow-float backdrop-blur-xl transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent md:flex"
-              aria-label={sidebarOpen ? "Hide match list" : "Show match list"}
-              aria-expanded={sidebarOpen}
-            >
-              {sidebarOpen ? "‹" : "›"}
-            </button>
+            {!isSingle && (
+              <button
+                type="button"
+                onClick={() => setSidebarOpen((open) => !open)}
+                className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-glass text-muted shadow-float backdrop-blur-xl transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent md:flex"
+                aria-label={sidebarOpen ? "Hide match list" : "Show match list"}
+                aria-expanded={sidebarOpen}
+              >
+                {sidebarOpen ? "‹" : "›"}
+              </button>
+            )}
             {/* Header stays compact and centred, so most of the map stays visible. */}
             <div className="mx-auto min-w-0 max-w-[720px] flex-1">
-              <MatchHeader match={selectedMatch} results={results} />
+              <MatchHeader match={selectedMatch} results={results} forceClosed={isSingle} />
             </div>
             {/* Balances the sidebar toggle so the header stays centred. */}
-            <div className="hidden w-11 shrink-0 md:block" />
+            {!isSingle && <div className="hidden w-11 shrink-0 md:block" />}
           </div>
+          {isSingle && (
+            <div className="mt-2 flex justify-center">
+              <Link
+                href={pastMatchHref}
+                className="rounded-full bg-fg px-4 py-2 text-sm font-medium text-bg shadow-float transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                See this week&apos;s matches <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Phones: only as tall as the whole world is at this width — a taller
@@ -161,9 +182,11 @@ export function MatchExperience({
       </section>
 
       {/* Mobile match list (below the map) */}
-      <nav aria-label="Matches" className="border-t border-line p-3 md:hidden">
-        {list}
-      </nav>
+      {!isSingle && (
+        <nav aria-label="Matches" className="border-t border-line p-3 md:hidden">
+          {list}
+        </nav>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ export function MatchScreen({
   totals,
   selectedMatchId,
   nextRoundKickoff = null,
+  pastMatchHref,
 }: {
   leagues: League[];
   active: string;
@@ -24,6 +25,8 @@ export function MatchScreen({
   selectedMatchId: string | undefined;
   // First kickoff after this week, shown when this week is empty.
   nextRoundKickoff?: string | null;
+  // Set for a match from an earlier week: single-match view (MatchExperience).
+  pastMatchHref?: string;
 }) {
   const isAll = active === "all";
   return (
@@ -36,6 +39,7 @@ export function MatchScreen({
             matches={matches}
             totals={totals}
             initialSelectedMatchId={selectedMatchId}
+            pastMatchHref={pastMatchHref}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
