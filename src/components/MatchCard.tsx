@@ -39,16 +39,18 @@ export function MatchCard({
   isTrending: boolean;
   onSelect: (matchId: string) => void;
 }) {
-  const { status, errorMessage, myVoteTeamId, vote } = useVote(match.id, () => onSelect(match.id));
+  const { status, errorMessage, errorKind, myVoteTeamId, vote, retry } = useVote(match.id, () => onSelect(match.id));
   const kickoff = useKickoffLabel(match.kickoff_at);
   const { homePct, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
   const isClosed = isVotingClosed(match.status);
-  const canVote = myVoteTeamId === null && status !== "pending" && !isClosed;
+  const isBusy = status === "pending" || status === "verifying";
+  const canVote = myVoteTeamId === null && !isBusy && !isClosed;
   const split = isEmpty ? "no votes" : `${homePct}% · ${100 - homePct}%`;
   const matchStatus = STATUS[match.status];
 
   let note: { text: string; isError: boolean };
-  if (status === "pending") note = { text: "Saving…", isError: false };
+  if (status === "verifying") note = { text: "Verifying you're a real fan…", isError: false };
+  else if (status === "pending") note = { text: "Saving…", isError: false };
   else if (status === "duplicate") note = { text: "Already counted from this device", isError: false };
   else if (status === "error") note = { text: errorMessage ?? "Couldn't save — try again", isError: true };
   else if (isClosed) note = { text: `Voting closed · ${isEmpty ? "no votes" : `final ${split}`}`, isError: false };
@@ -94,8 +96,19 @@ export function MatchCard({
       <CardBar match={match} homePct={homePct} isEmpty={isEmpty} />
 
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span role="status" className={`truncate ${note.isError ? "text-danger" : "text-muted"}`}>
-          {note.text}
+        <span role="status" className="flex min-w-0 items-center gap-2">
+          <span className={`truncate ${note.isError ? "text-danger" : "text-muted"}`} title={note.text}>
+            {note.text}
+          </span>
+          {status === "error" && errorKind !== "server" && (
+            <button
+              type="button"
+              onClick={retry}
+              className="shrink-0 rounded-full bg-fg/10 px-2.5 py-0.5 font-medium text-fg hover:bg-fg/15 focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              Try again
+            </button>
+          )}
         </span>
         <button
           type="button"

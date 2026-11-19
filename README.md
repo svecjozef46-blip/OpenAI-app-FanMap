@@ -94,7 +94,7 @@ Vstavaný testovací nástroj Node 24, bez ďalších závislostí. Pokrýva hla
 
 ## Ikony a inštalácia na plochu (PWA)
 
-Appka sa dá pridať na plochu telefónu pod názvom „Fanzo“ (`src/app/manifest.ts`). Ikony kreslí `python scripts/generate-icons.py`; po zmene farieb v skripte ho stačí spustiť znova.
+Appka sa dá pridať na plochu telefónu pod názvom „Global Fan Map“ (`src/app/manifest.ts`). Ikony kreslí `python scripts/generate-icons.py`; po zmene farieb v skripte ho stačí spustiť znova.
 
 ## Vzhľad: svetlý a tmavý režim
 
