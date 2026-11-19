@@ -7,8 +7,8 @@ import type { MetadataRoute } from "next";
 // layout.tsx. Icons come from scripts/generate-icons.py.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Fanzo",
-    short_name: "Fanzo",
+    name: "Global Fan Map",
+    short_name: "Global Fan Map",
     description: "Show which team you support and see which countries stand with you.",
     start_url: "/",
     display: "standalone",

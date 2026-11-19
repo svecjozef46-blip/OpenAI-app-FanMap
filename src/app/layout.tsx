@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { TurnstilePreload } from "@/components/TurnstilePreload";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,8 +32,8 @@ export const metadata: Metadata = {
   // Name used when the site is installed to a phone's home screen (see
   // app/manifest.ts). Icons and the manifest link are added by Next.js from
   // the files in app/ (favicon.ico, icon.svg, apple-icon.png, manifest.ts).
-  applicationName: "Fanzo",
-  appleWebApp: { capable: true, title: "Fanzo", statusBarStyle: "black-translucent" },
+  applicationName: "Global Fan Map",
+  appleWebApp: { capable: true, title: "Global Fan Map", statusBarStyle: "black-translucent" },
 };
 
 // Browser chrome (address bar on phones) matches the page in both modes.
@@ -60,8 +61,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Open the connection to the human-check provider early (lib/turnstile.ts). */}
+        <link rel="preconnect" href="https://challenges.cloudflare.com" />
       </head>
-      <body className="flex h-full flex-col overflow-hidden bg-bg text-fg">{children}</body>
+      <body className="flex h-full flex-col overflow-hidden bg-bg text-fg">
+        <TurnstilePreload />
+        {children}
+      </body>
     </html>
   );
 }

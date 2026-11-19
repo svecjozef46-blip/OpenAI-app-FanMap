@@ -57,7 +57,10 @@ export function SiteFooter({ leagues }: { leagues: League[] }) {
 
         <p className="border-t border-line pt-6 text-xs text-muted">
           © {new Date().getFullYear()} Global Fan Map. A fan-made project, not affiliated with any club or league. Team
-          names and colors are used for identification only.
+          names and colors are used for identification only.{" "}
+          <Link href="/privacy" className="underline hover:text-fg">
+            Privacy
+          </Link>
         </p>
       </div>
     </footer>
