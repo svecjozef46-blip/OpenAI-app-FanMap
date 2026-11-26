@@ -45,6 +45,8 @@ const labelLayer: maplibregl.LayerSpecification = {
   id: LABEL_LAYER_ID,
   type: "symbol",
   source: LABEL_SOURCE_ID,
+  // Like Mapbox: no names below zoom 1 (the whole world on a phone).
+  minzoom: 1,
   // Up to 3 levels early at world view, 2 when zoomed in (as on Mapbox).
   filter: ["<=", ["get", "rank"], ["+", ["zoom"], ["step", ["zoom"], 3, 2.5, 2]]],
   layout: {
@@ -124,6 +126,12 @@ export const maplibreEngine: MapEngine = {
     if (attribution === "compact") {
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     }
+    // A compact attribution (phones, and the home-page map) starts expanded
+    // in MapLibre, laying "Natural Earth" over the map; Mapbox starts it
+    // folded to the (i) button. Fold it the same way.
+    map.once("load", () => {
+      container.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+    });
     return map as unknown as mapboxgl.Map;
   },
 
