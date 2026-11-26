@@ -15,6 +15,7 @@ Uses Node's built-in test runner (Node 24 runs the TypeScript files directly), s
 | `security.test.ts` | Database security, by calling Supabase directly with the public key like any stranger could: no reading, inserting, changing or deleting votes; no editing matches, teams or leagues; `submit_vote()` and the rate-limit function cannot be called directly without the server secret; one address gets 20 vote attempts a minute. | No |
 | `week.test.ts` | The match week (Monday to Sunday, Bratislava time): boundaries, the weeks of the clock changes, that the database's `week_start()` agrees with `src/lib/week.ts`, every automatic status change (`match_status_at()`), that the public can't run `rotate_matches()`, and that the old test match has been archived. | No |
 | `map-data.test.ts` | The country shapes, labels and font of the MapLibre map (`public/data`, `public/fonts`, built by `scripts/build-countries.mjs`): every shape has a valid, unique ISO code, every country a vote can come from has a shape, no Antarctica, every label character has glyphs. | No |
+| `privacy.test.ts` | The privacy pages: operator details appear only when all three variables are set (and a malformed e-mail never becomes a link); `/privacy` and `/privacy/sk` render, link to each other, and show the configured contact or the neutral placeholder. | Yes (the page check) |
 | `colors.test.ts` | Team colors stay distinguishable for color-blind fans, on tricky pairs and on every match currently in the database, in light and dark mode. | No |
 
 ## What the tests touch

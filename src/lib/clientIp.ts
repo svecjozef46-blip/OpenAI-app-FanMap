@@ -23,3 +23,11 @@ export function getClientIp(request: NextRequest): string {
 export function computeIpHash(ip: string, serverSecret: string, scope = ""): string {
   return createHash("sha256").update(`${scope}${serverSecret}:${ip}`).digest("hex");
 }
+
+// Logs a database error without its `details` and `hint`: for a rejected
+// row PostgreSQL puts the row's values there ("Failing row contains …",
+// "Key (match_id, voter_hash)=…"), which would write the voter identifier
+// into the server logs.
+export function logDbError(label: string, error: { code?: string; message?: string } | null | undefined) {
+  console.error(`${label}:`, { code: error?.code, message: error?.message });
+}

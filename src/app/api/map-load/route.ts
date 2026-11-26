@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { computeIpHash, getClientIp } from "@/lib/clientIp";
+import { computeIpHash, getClientIp, logDbError } from "@/lib/clientIp";
 import { getMapBudgetStatus, getMapLoadLimit } from "@/lib/mapBudgetServer";
 
 // Monthly map budget (see lib/mapBudgetServer.ts).
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     p_server_secret: serverSecret,
   });
   if (rateError) {
-    console.error("register_vote_attempt (map) failed:", rateError);
+    logDbError("register_vote_attempt (map) failed", rateError);
     return NextResponse.json({ error: "unavailable" }, { status: 503, headers: NO_STORE });
   }
   if (underLimit === false) {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   });
   const row = Array.isArray(data) ? data[0] : data;
   if (error || !row || typeof row.allowed !== "boolean") {
-    console.error("register_map_load failed:", error);
+    logDbError("register_map_load failed", error);
     return NextResponse.json({ error: "unavailable" }, { status: 503, headers: NO_STORE });
   }
   return NextResponse.json(
