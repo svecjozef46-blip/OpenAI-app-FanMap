@@ -1,6 +1,6 @@
 # Mapbox vs MapLibre: snímky z 2026-11-26
 
-Každý obrázok: vľavo **Mapbox** (produkcia, vetva `main`), vpravo **MapLibre** (vetva `maplibre-alt`, `NEXT_PUBLIC_MAP_ENGINE=maplibre`). Zápas Hamburger SV – Bayern Munich, rovnaká veľkosť okna, rovnaké priblíženie (dvojklik na to isté miesto).
+Samotné snímky sú v pull requeste [svecjozef46-blip/OpenAI-app-FanMap#2](https://github.com/svecjozef46-blip/OpenAI-app-FanMap/pull/2) a v commite `45121a0` (v hlavnej verzii nie sú, aby repozitár nerástol o 1,6 MB). Každý obrázok: vľavo **Mapbox** (produkcia, vetva `main`), vpravo **MapLibre** (vetva `maplibre-alt`, `NEXT_PUBLIC_MAP_ENGINE=maplibre`). Zápas Hamburger SV – Bayern Munich, rovnaká veľkosť okna, rovnaké priblíženie (dvojklik na to isté miesto).
 
 - `real-votes-*` — skutočné hlasy z databázy. Pre tento zápas sú to 2 hlasy zo Slovenska, čo je pod prahom 3 (`MIN_VOTES_TO_COLOR`), takže Slovensko je šedé („nerozhodnuté“) v oboch verziách.
 - `demo-*` — **ukážkové výsledky** (54 krajín vrátane Luxemburska, Malty, Kosova, Singapuru, Monaka), podstrčené obom verziám rovnako počas snímania, aby bolo vidieť farby tímov, sýtosť podľa náskoku a malé štáty. V databáze nič nie je.
