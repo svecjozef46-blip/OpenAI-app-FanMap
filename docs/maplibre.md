@@ -47,6 +47,30 @@ Stav k 2026-11-26: v `votes` je len `SK` (má tvar). Z celého zoznamu ISO 3166-
 - Mapbox používa písmo DIN Pro (licencované, nedá sa použiť mimo Mapboxu). Open Sans Semibold je najbližšia voľná náhrada z dostupných sád; písmo je mierne širšie a oblejšie.
 - Názvy sú z `Intl.DisplayNames` (rovnaký zdroj ako tooltip, `countryName()`), s pár skráteniami pre mapu („DR Congo“, „Bosnia and Herzegovina“…).
 
+## Výkon (meranie 2026-11-26)
+
+Studené načítanie stránky zápasu (prázdna cache), 5 meraní, medián. Všetko na Verceli (produkcia a preview), rovnaký prehliadač a sieť. Bajty = prenesené (po kompresii), vrátane požiadaviek z web workerov (dlaždice, tvary krajín).
+
+| | Mapbox, `main` (produkcia) | Mapbox s touto zmenou (preview bez premennej) | MapLibre (preview) |
+|---|---|---|---|
+| JavaScript | 748 KB | 757 KB | 513 KB |
+| Mapové dáta (štýl, dlaždice / tvary krajín) | 424 KB | 424 KB | 613 KB |
+| Písmo názvov (glyphs) | 128 KB | 128 KB | 40 KB |
+| Ostatné (stránka, CSS, webové písma, API) | 114 KB | 114 KB | 117 KB |
+| **Spolu** | **1 414 KB** | **1 423 KB** | **1 283 KB** |
+| Čas do zobrazenia mapy (medián) | 2,67 s | 2,90 s | 3,01 s |
+
+- Mapbox cesta s touto zmenou stiahne o 9 KB JavaScriptu viac (+1 %: knižnica sa načítava ako samostatný blok cez `import()`). Časy Mapboxu sa medzi meraniami prekrývajú (2,4–3,5 s), rozdiel je v šume.
+- MapLibre stiahne spolu o ~130 KB menej, ale tvary krajín (613 KB) sú väčšie než Mapbox dlaždice pre pohľad na svet a prehliadač ich musí celé spracovať, preto je mapa hotová asi o 0,1–0,3 s neskôr. Pri ďalšej návšteve ide GeoJSON z cache prehliadača (Vercel ho len overí).
+
+## Známe rozdiely oproti Mapboxu
+
+- **Detail pri veľkom priblížení:** od zoomu ~6 (Luxembursko, okolie Singapuru) sú hranice veľkých krajín a malé ostrovy veľkých krajín jednoduchšie než v Mapboxe (Natural Earth 10m je hrubší než dáta Mapboxu, a navyše sa zjednodušuje kvôli veľkosti súboru). Malé štáty samotné (Luxembursko, Malta s Gozom, Singapur, Kosovo, Monako) majú tvar v poriadku.
+- **Písmo popiskov:** Open Sans Semibold namiesto DIN Pro; o niečo širšie písmo. Názvy podľa `Intl` („Türkiye“, „Czechia“), Mapbox má vlastné, väčšinou rovnaké.
+- **Výber popiskov:** pravidlá sú nastavené tak, aby sa hustotou podobali Mapboxu, ale konkrétne krajiny s popiskom sa miestami líšia (napr. pri pohľade na Európu MapLibre ukáže „Iceland“ či „Malta“, Mapbox iné).
+- **Atribúcia:** „Natural Earth“ namiesto loga Mapbox a „© Mapbox © OpenStreetMap“.
+- **Hranice:** rovnaký „US“ pohľad; drobné rozdiely v priebehu hraníc (rôzne zdroje dát), žiadne rozdiely v tom, ktorá krajina komu patrí, sme pri kontrolovaných sporných územiach nenašli.
+
 ## Ako aktualizovať dáta
 
 1. Zmeň v `scripts/build-countries.mjs` čo treba (verzia Natural Earth, mapovanie kódov, úroveň zjednodušenia).
