@@ -2,6 +2,9 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { verifyTurnstileToken, type TurnstileResult } from "@/lib/turnstileServer";
+import { computeIpHash, getClientIp } from "@/lib/clientIp";
+import { getMapBudgetStatus } from "@/lib/mapBudgetServer";
+import { pausedMessage } from "@/lib/mapBudgetMessage";
 
 // Controlled server-side voting path (dev-prompt-chatgpt.md "ANTI-SPAM":
 // "Voting backend implemented safely, no privileged DB keys exposed in
@@ -20,19 +23,6 @@ type VoteRequestBody = {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function getClientIp(request: NextRequest): string {
-  // Vercel (and most proxies) set x-forwarded-for; it can be a comma list
-  // if there are multiple hops, so the client's address is the first one.
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim();
-  }
-  // Local `next dev` has no proxy in front of it, so there's no header.
-  // Falling back to a constant is fine there since every local vote would
-  // collide anyway (same machine) — this path never runs in production.
-  return "local-dev";
-}
 
 // The country a vote counts for is the voter's own location, determined
 // server-side — NEVER a value the client sends. The whole product is "which
@@ -58,13 +48,6 @@ function getVoterCountry(request: NextRequest): string | null {
 
 function computeVoterHash(ip: string, userAgent: string, seed: string): string {
   return createHash("sha256").update(`${seed}:${ip}:${userAgent}`).digest("hex");
-}
-
-// The address is stored for rate limiting only as a fingerprint mixed with
-// the server secret, so the table never holds a raw IP address and the
-// fingerprint can't be reversed by trying all addresses.
-function computeIpHash(ip: string, serverSecret: string): string {
-  return createHash("sha256").update(`${serverSecret}:${ip}`).digest("hex");
 }
 
 // Our own automated tests (tests/voting.test.ts) can't solve a Turnstile
@@ -169,7 +152,23 @@ export async function POST(request: NextRequest) {
         // local development without Turnstile keys skips it.
         Promise.resolve(process.env.NODE_ENV === "production" ? "unavailable" : "skipped");
 
-    const [{ data: allowed, error: rateError }, verdict] = await Promise.all([rateCheck, humanCheck]);
+    // 3) Monthly map budget (lib/mapBudgetServer.ts): once it is used up,
+    // voting pauses until the 1st of next month together with the map. A
+    // database hiccup here (null) doesn't block votes.
+    const budgetCheck = getMapBudgetStatus(supabase);
+
+    const [{ data: allowed, error: rateError }, verdict, budget] = await Promise.all([
+      rateCheck,
+      humanCheck,
+      budgetCheck,
+    ]);
+
+    if (budget?.paused) {
+      return NextResponse.json(
+        { error: "voting_paused", message: pausedMessage(budget.resetsOn), resetsOn: budget.resetsOn },
+        { status: 503 }
+      );
+    }
 
     if (rateError) {
       console.error("register_vote_attempt failed:", rateError);

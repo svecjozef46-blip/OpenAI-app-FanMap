@@ -8,6 +8,7 @@ import { isVotingClosed, splitPercent, useKickoffLabel } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
 import { useVote } from "@/lib/useVote";
+import { useMapBudget } from "@/lib/mapBudget";
 
 const STATUS: Record<MatchWithTeams["status"], { label: string; dot: string }> = {
   upcoming: { label: "Upcoming", dot: "bg-sky-500" },
@@ -43,7 +44,9 @@ export function MatchCard({
   const kickoff = useKickoffLabel(match.kickoff_at);
   const { homePct, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
   const isClosed = isVotingClosed(match.status);
-  const canVote = myVoteTeamId === null && status !== "pending" && !isClosed;
+  // Monthly map budget used up: buttons off, the note and the banner say why.
+  const isPaused = useMapBudget()?.paused === true;
+  const canVote = myVoteTeamId === null && status !== "pending" && !isClosed && !isPaused;
   const split = isEmpty ? "no votes" : `${homePct}% · ${100 - homePct}%`;
   const matchStatus = STATUS[match.status];
 
@@ -51,6 +54,7 @@ export function MatchCard({
   if (status === "pending") note = { text: "Saving…", isError: false };
   else if (status === "duplicate") note = { text: "Already counted from this device", isError: false };
   else if (status === "error") note = { text: errorMessage ?? "Couldn't save — try again", isError: true };
+  else if (isPaused && !isClosed && myVoteTeamId === null) note = { text: `Voting paused · ${split}`, isError: false };
   else if (isClosed) note = { text: `Voting closed · ${isEmpty ? "no votes" : `final ${split}`}`, isError: false };
   else if (myVoteTeamId === null) note = { text: isEmpty ? "Tap the team you support" : `${split} · tap your team`, isError: false };
   else note = { text: isEmpty ? "No votes yet" : `${homePct}% · ${100 - homePct}%`, isError: false };

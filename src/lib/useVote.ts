@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getVoterSeed, rememberMyVote, useMyVoteForMatch } from "@/lib/voter";
 import { dispatchVoteCast } from "@/lib/voteCastEvent";
 import { getTurnstileToken, preloadTurnstile } from "@/lib/turnstile";
+import { getMapBudget, markPaused } from "@/lib/mapBudget";
+import { pausedMessage } from "@/lib/mapBudgetMessage";
 
 export type VoteStatus = "idle" | "pending" | "voted" | "duplicate" | "error";
 
@@ -32,6 +34,15 @@ export function useVote(matchId: string, onVoted?: () => void) {
 
   async function vote(teamId: string) {
     if (myVoteTeamId !== null || status === "pending") return;
+
+    // Monthly map budget used up: voting is paused site-wide (the banner
+    // says why). The server refuses too; this just answers instantly.
+    const budget = getMapBudget();
+    if (budget?.paused) {
+      setErrorMessage(pausedMessage(budget.resetsOn));
+      setStatus("error");
+      return;
+    }
 
     setStatus("pending");
     setErrorMessage(null);
@@ -65,6 +76,9 @@ export function useVote(matchId: string, onVoted?: () => void) {
         // determine your country." when FANMAP_DEV_COUNTRY is missing
         // locally) — a generic "try again" hides fixable problems.
         const body = await response.json().catch(() => null);
+        if (body?.error === "voting_paused") {
+          markPaused(typeof body.resetsOn === "string" ? body.resetsOn : null);
+        }
         setErrorMessage(typeof body?.message === "string" ? body.message : null);
         setStatus("error");
         return;

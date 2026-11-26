@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PausedBanner } from "@/components/PausedBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -61,7 +62,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body className="flex h-full flex-col overflow-hidden bg-bg text-fg">{children}</body>
+      <body className="flex h-full flex-col overflow-hidden bg-bg text-fg">
+        {/* Shown only while the monthly map budget is used up (lib/mapBudgetServer.ts). */}
+        <PausedBanner />
+        <div className="min-h-0 flex-1">{children}</div>
+      </body>
     </html>
   );
 }

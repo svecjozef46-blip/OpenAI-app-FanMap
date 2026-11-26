@@ -17,6 +17,7 @@ import {
   getMapboxToken,
   tidyBaseStyle,
 } from "@/lib/mapSetup";
+import { claimMapLoad } from "@/lib/mapBudget";
 
 const FADE_IN_MS = 700; // one country fading in
 const STAGGER_MS = 22; // delay between consecutive countries (west → east)
@@ -109,10 +110,10 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide, theme]);
 
-  useEffect(() => {
+  function createMap(): (() => void) | undefined {
     const token = getMapboxToken();
     const container = containerRef.current;
-    if (!token || !container) return;
+    if (!token || !container) return undefined;
 
     mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
@@ -157,6 +158,23 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       mapRef.current = null;
       loadedRef.current = false;
       shownRef.current = null;
+    };
+  }
+
+  useEffect(() => {
+    // Every Mapbox start is billed above 50,000 a month, so it is counted
+    // first (lib/mapBudget.ts). When the budget is used up the hero simply
+    // shows no map; the banner at the top of the page explains why.
+    let cancelled = false;
+    let destroyMap: (() => void) | undefined;
+    if (!getMapboxToken() || !containerRef.current) return;
+    claimMapLoad().then((allowed) => {
+      if (cancelled || !allowed) return;
+      destroyMap = createMap();
+    });
+    return () => {
+      cancelled = true;
+      destroyMap?.();
     };
     // Created once — see comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -236,6 +236,88 @@ $$;
 revoke all on function public.register_vote_attempt(text, text) from public;
 grant execute on function public.register_vote_attempt(text, text) to anon, authenticated;
 
+-- MONTHLY MAP BUDGET ----------------------------------------------------------
+-- Mapbox bills every map start above 50,000 a month. The site counts its own
+-- map starts here (one row per UTC calendar month) and, at the limit set in
+-- src/lib/mapBudgetServer.ts (49,000, or MAP_LOAD_LIMIT in Vercel), stops
+-- starting maps and pauses voting until the 1st of next month. Reasoning in
+-- docs/decisions-log.md, 2026-11-26. Invisible to the API: RLS on, no
+-- policies, no grants; only the two functions below touch it.
+create table public.map_load_counter (
+  period date primary key,
+  loads integer not null default 0 check (loads >= 0)
+);
+alter table public.map_load_counter enable row level security;
+revoke all on table public.map_load_counter from anon, authenticated;
+
+-- Called by src/app/api/map-load/route.ts right before a map starts. Counts
+-- the start and returns allowed = true while this month is under p_limit;
+-- at the limit it counts nothing more and returns allowed = false. Only our
+-- server may call it (same server secret as voting), so nobody can use up
+-- the budget by calling the database directly.
+create or replace function public.register_map_load(p_server_secret text, p_limit integer)
+returns table (allowed boolean, used integer, resets_on date)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_period date := (date_trunc('month', now() at time zone 'UTC'))::date;
+  v_used integer;
+begin
+  if p_server_secret is null or not exists (
+    select 1 from public.server_secrets
+    where name = 'vote'
+      and secret_hash = encode(sha256(convert_to(p_server_secret, 'UTF8')), 'hex')
+  ) then
+    raise exception 'map loads are only accepted from the app server' using errcode = '42501';
+  end if;
+
+  if p_limit is null or p_limit < 1 then
+    raise exception 'invalid limit' using errcode = '22023';
+  end if;
+
+  insert into public.map_load_counter (period, loads) values (v_period, 0)
+  on conflict (period) do nothing;
+
+  update public.map_load_counter c
+     set loads = c.loads + 1
+   where c.period = v_period and c.loads < p_limit
+  returning c.loads into v_used;
+
+  if found then
+    return query select true, v_used, (v_period + interval '1 month')::date;
+  else
+    select c.loads into v_used from public.map_load_counter c where c.period = v_period;
+    return query select false, v_used, (v_period + interval '1 month')::date;
+  end if;
+end;
+$$;
+
+revoke all on function public.register_map_load(text, integer) from public;
+grant execute on function public.register_map_load(text, integer) to anon, authenticated;
+
+-- Read-only: is this month's budget used up, and when does it reset? Used
+-- by the banner and by /api/votes. Returns no count, so traffic stays
+-- private even though the public may call it.
+create or replace function public.get_map_budget(p_limit integer)
+returns table (paused boolean, resets_on date)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    coalesce(c.loads, 0) >= p_limit,
+    ((date_trunc('month', now() at time zone 'UTC'))::date + interval '1 month')::date
+  from (select 1) x
+  left join public.map_load_counter c
+    on c.period = (date_trunc('month', now() at time zone 'UTC'))::date;
+$$;
+
+revoke all on function public.get_map_budget(integer) from public;
+grant execute on function public.get_map_budget(integer) to anon, authenticated;
+
 -- MATCH WEEK AND AUTOMATIC STATUS CHANGES -----------------------------------
 -- A match week runs from Monday 00:00 to the next Monday 00:00 in Bratislava
 -- time — the same definition as src/lib/week.ts (tests/week.test.ts checks

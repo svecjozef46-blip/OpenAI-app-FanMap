@@ -21,6 +21,8 @@ import {
   getMapboxToken,
   tidyBaseStyle,
 } from "@/lib/mapSetup";
+import { claimMapLoad, useMapBudget } from "@/lib/mapBudget";
+import { formatResetDate } from "@/lib/mapBudgetMessage";
 
 // Countries with some votes, but not enough to call (see MIN_VOTES_TO_COLOR
 // in lib/results.ts) or a tie: shown in a quiet grey (MAP_PALETTE.undecided)
@@ -49,10 +51,12 @@ export function GlobalMap({
 }) {
   const theme = useTheme();
   // "loading" until Mapbox has drawn the world; "error" if it can't start
-  // (missing token, blocked network, WebGL unavailable).
-  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">(
+  // (missing token, blocked network, WebGL unavailable); "paused" when this
+  // month's map budget is used up (lib/mapBudgetServer.ts).
+  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error" | "paused">(
     process.env.NEXT_PUBLIC_MAPBOX_TOKEN ? "loading" : "error"
   );
+  const budget = useMapBudget();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const loadedRef = useRef(false);
@@ -74,10 +78,10 @@ export function GlobalMap({
     themeRef.current = theme;
   });
 
-  useEffect(() => {
+  function createMap(): (() => void) | undefined {
     const token = getMapboxToken();
     const container = containerRef.current;
-    if (!token || !container) return;
+    if (!token || !container) return undefined;
 
     mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
@@ -235,6 +239,26 @@ export function GlobalMap({
       loadedRef.current = false;
       applyResultsRef.current = null;
     };
+  }
+
+  useEffect(() => {
+    // Every Mapbox start is billed above 50,000 a month, so it is counted
+    // first and only happens while this month's budget lasts.
+    let cancelled = false;
+    let destroyMap: (() => void) | undefined;
+    if (!getMapboxToken() || !containerRef.current) return;
+    claimMapLoad().then((allowed) => {
+      if (cancelled) return;
+      if (!allowed) {
+        setMapStatus("paused");
+        return;
+      }
+      destroyMap = createMap();
+    });
+    return () => {
+      cancelled = true;
+      destroyMap?.();
+    };
     // Intentionally empty: the map is created once — see comment above.
   }, []);
 
@@ -247,7 +271,12 @@ export function GlobalMap({
       <div ref={containerRef} className="h-full w-full" />
       {mapStatus !== "ready" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center">
-          {mapStatus === "loading" ? (
+          {mapStatus === "paused" ? (
+            <p role="status" className="max-w-xs text-sm text-muted">
+              The map is taking a break until {formatResetDate(budget?.resetsOn ?? null) ?? "next month"}. Results so
+              far are still in the match list.
+            </p>
+          ) : mapStatus === "loading" ? (
             <p role="status" className="text-sm text-muted motion-safe:animate-pulse">
               Loading the map…
             </p>
