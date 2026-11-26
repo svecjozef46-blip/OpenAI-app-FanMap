@@ -103,42 +103,52 @@ body {
   }
 }
 
-/* MAPBOX CHROME -------------------------------------------------------------
-   Restyles Mapbox's own controls to match the UI in both modes. */
-.mapboxgl-map {
+/* MAP CHROME ----------------------------------------------------------------
+   Restyles the map library's own controls (Mapbox: .mapboxgl-*, MapLibre:
+   .maplibregl-*) to match the UI in both modes. */
+.mapboxgl-map,
+.maplibregl-map {
   font-family: inherit;
 }
-.mapboxgl-ctrl-logo {
+.mapboxgl-ctrl-logo,
+.maplibregl-ctrl-logo {
   opacity: 0.55;
 }
-.mapboxgl-ctrl-attrib {
+.mapboxgl-ctrl-attrib,
+.maplibregl-ctrl-attrib {
   background: transparent !important;
   color: var(--muted);
 }
-.mapboxgl-ctrl-attrib a {
+.mapboxgl-ctrl-attrib a,
+.maplibregl-ctrl-attrib a {
   color: var(--muted) !important;
 }
-.mapboxgl-ctrl-group {
+.mapboxgl-ctrl-group,
+.maplibregl-ctrl-group {
   background: var(--glass) !important;
   border: 1px solid var(--line);
   box-shadow: none !important;
   backdrop-filter: blur(16px);
 }
-.mapboxgl-ctrl-group button + button {
+.mapboxgl-ctrl-group button + button,
+.maplibregl-ctrl-group button + button {
   border-top-color: var(--line) !important;
 }
-/* Mapbox's +/- icons are black; flip them to white in dark mode. */
+/* The +/- icons are black; flip them to white in dark mode. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+  :root:not([data-theme="light"]) .mapboxgl-ctrl-group .mapboxgl-ctrl-icon,
+  :root:not([data-theme="light"]) .maplibregl-ctrl-group .maplibregl-ctrl-icon {
     filter: invert(1);
   }
 }
-:root[data-theme="dark"] .mapboxgl-ctrl-group .mapboxgl-ctrl-icon {
+:root[data-theme="dark"] .mapboxgl-ctrl-group .mapboxgl-ctrl-icon,
+:root[data-theme="dark"] .maplibregl-ctrl-group .maplibregl-ctrl-icon {
   filter: invert(1);
 }
 
 /* Country tooltip on the match map (GlobalMap.tsx). */
-.fanmap-popup .mapboxgl-popup-content {
+.fanmap-popup .mapboxgl-popup-content,
+.fanmap-popup .maplibregl-popup-content {
   background: var(--glass);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -149,7 +159,8 @@ body {
   backdrop-filter: blur(16px);
   min-width: 140px;
 }
-.fanmap-popup .mapboxgl-popup-tip {
+.fanmap-popup .mapboxgl-popup-tip,
+.fanmap-popup .maplibregl-popup-tip {
   display: none;
 }
 .fanmap-popup__title {

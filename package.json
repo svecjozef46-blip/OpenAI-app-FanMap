@@ -13,6 +13,7 @@
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.49.0",
     "mapbox-gl": "^3.9.0",
+    "maplibre-gl": "^5.24.1",
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "mapshaper": "^0.8.10",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

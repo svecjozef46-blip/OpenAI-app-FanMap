@@ -1,26 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import type mapboxgl from "mapbox-gl";
 import type { CountryResult, MatchWithTeams } from "@/lib/types";
 import { countryName, splitPercent } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
-import {
-  COUNTRY_SOURCE_ID,
-  COUNTRY_SOURCE_LAYER,
-  FILL_LAYER_ID,
-  MAP_PALETTE,
-  MAP_STYLE,
-  PROJECTION,
-  WORLD_BOUNDS,
-  addCountryLayers,
-  applyMapPalette,
-  fitWorld,
-  getMapboxToken,
-  tidyBaseStyle,
-} from "@/lib/mapSetup";
+import { FILL_LAYER_ID, MAP_PALETTE, applyMapPalette, fitWorld } from "@/lib/mapSetup";
+import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad, useMapBudget } from "@/lib/mapBudget";
 import { formatResetDate } from "@/lib/mapBudgetMessage";
 
@@ -37,7 +24,7 @@ function opacityForShare(leaderShare: number): number {
   return 0.4 + Math.min(Math.max(leaderShare - 0.5, 0), 0.5) * 0.9;
 }
 
-// Per dev-prompt-chatgpt.md "MAP MATCH SWITCHING": the Mapbox instance is
+// Per dev-prompt-chatgpt.md "MAP MATCH SWITCHING": the map instance is
 // created exactly once (mount effect below). Match switches and new votes
 // only call setFeatureState — the map, source and layers are never
 // recreated, which is what prevents flicker when switching matches. The
@@ -50,11 +37,12 @@ export function GlobalMap({
   results: CountryResult[];
 }) {
   const theme = useTheme();
-  // "loading" until Mapbox has drawn the world; "error" if it can't start
-  // (missing token, blocked network, WebGL unavailable); "paused" when this
-  // month's map budget is used up (lib/mapBudgetServer.ts).
+  // "loading" until the map has drawn the world; "error" if it can't start
+  // (missing Mapbox token, blocked network, WebGL unavailable); "paused"
+  // when this month's Mapbox budget is used up (lib/mapBudgetServer.ts;
+  // never with MapLibre, which isn't billed — see lib/mapEngine.ts).
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error" | "paused">(
-    process.env.NEXT_PUBLIC_MAPBOX_TOKEN ? "loading" : "error"
+    isMapEngineConfigured() ? "loading" : "error"
   );
   const budget = useMapBudget();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -78,32 +66,28 @@ export function GlobalMap({
     themeRef.current = theme;
   });
 
-  function createMap(): (() => void) | undefined {
-    const token = getMapboxToken();
+  function createMap(engine: MapEngine): (() => void) | undefined {
     const container = containerRef.current;
-    if (!token || !container) return undefined;
+    if (!engine.isConfigured() || !container) return undefined;
 
-    mapboxgl.accessToken = token;
-    const map = new mapboxgl.Map({
+    // The engine sets the shared look (style, projection, start bounds, no
+    // world copies) and turns off its own window-resize handling: resizing
+    // is handled by the ResizeObserver below. The library's own handling
+    // tags its camera events like user input, which would make refit()
+    // think the visitor had moved the map.
+    const map = engine.createMap({
       container,
-      style: MAP_STYLE,
-      projection: PROJECTION,
-      renderWorldCopies: false,
-      bounds: WORLD_BOUNDS,
-      dragRotate: false,
-      pitchWithRotate: false,
-      attributionControl: true,
-      // Resizing is handled by the ResizeObserver below. Mapbox's own
-      // window-resize handling tags its camera events like user input,
-      // which would make refit() think the visitor had moved the map.
-      trackResize: false,
+      interactive: true,
+      attribution: "default",
       // On phones the map sits inside a scrolling page: one finger scrolls
-      // the page, two fingers move the map (Mapbox shows a hint).
+      // the page, two fingers move the map (the map shows a hint).
       cooperativeGestures: window.matchMedia("(max-width: 767px)").matches,
+      withHover: true,
+      countryLabels: true,
     });
     mapRef.current = map;
     map.touchZoomRotate.disableRotation();
-    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
+    map.addControl(new engine.NavigationControl({ showCompass: false }), "bottom-right");
 
     // Re-fit the whole world whenever the container changes size (sidebar
     // opened/closed, window resized) — unless the visitor has zoomed or
@@ -130,14 +114,13 @@ export function GlobalMap({
     resizeObserver.observe(container);
 
     map.on("load", () => {
-      const beforeId = tidyBaseStyle(map, { keepCountryLabels: true });
-      addCountryLayers(map, { beforeId, withHover: true });
+      engine.setupLayers(map, { withHover: true, countryLabels: true, theme: themeRef.current });
       loadedRef.current = true;
       applyResults();
       setMapStatus("ready");
     });
 
-    // Mapbox reports many harmless errors (a single tile timing out); only
+    // The map reports many harmless errors (a single tile timing out); only
     // a failure before the first successful load means "no map".
     map.on("error", (event) => {
       if (loadedRef.current) return;
@@ -147,7 +130,7 @@ export function GlobalMap({
 
     // Hover: outline + tooltip (styled in globals.css, .fanmap-popup).
     let hoveredId: string | number | null = null;
-    const popup = new mapboxgl.Popup({
+    const popup = new engine.Popup({
       closeButton: false,
       closeOnClick: false,
       className: "fanmap-popup",
@@ -156,10 +139,7 @@ export function GlobalMap({
 
     function setHover(id: string | number | null, hover: boolean) {
       if (id === null) return;
-      map.setFeatureState(
-        { source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id },
-        { hover }
-      );
+      map.setFeatureState(engine.country(id), { hover });
     }
 
     map.on("mousemove", FILL_LAYER_ID, (e) => {
@@ -204,10 +184,7 @@ export function GlobalMap({
       applyMapPalette(map, themeRef.current);
 
       for (const code of coloredCountriesRef.current) {
-        map.setFeatureState(
-          { source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id: code },
-          { fillColor: null, lineColor: null, opacity: 0 }
-        );
+        map.setFeatureState(engine.country(code), { fillColor: null, lineColor: null, opacity: 0 });
       }
       coloredCountriesRef.current = new Set();
 
@@ -222,10 +199,7 @@ export function GlobalMap({
           const color = homeLeads ? colors.home : colors.away;
           state = { fillColor: color, lineColor: color, opacity: opacityForShare(leaderVotes / r.totalVotes) };
         }
-        map.setFeatureState(
-          { source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id: r.countryCode },
-          state
-        );
+        map.setFeatureState(engine.country(r.countryCode), state);
         coloredCountriesRef.current.add(r.countryCode);
       }
     }
@@ -243,18 +217,29 @@ export function GlobalMap({
 
   useEffect(() => {
     // Every Mapbox start is billed above 50,000 a month, so it is counted
-    // first and only happens while this month's budget lasts.
+    // first and only happens while this month's budget lasts. MapLibre
+    // costs nothing: never counted, always started, whatever the budget
+    // says. The map library itself is loaded meanwhile (lib/mapEngine.ts).
     let cancelled = false;
     let destroyMap: (() => void) | undefined;
-    if (!getMapboxToken() || !containerRef.current) return;
-    claimMapLoad().then((allowed) => {
-      if (cancelled) return;
-      if (!allowed) {
-        setMapStatus("paused");
-        return;
+    if (!isMapEngineConfigured() || !containerRef.current) return;
+    const allowedPromise = MAP_ENGINE === "mapbox" ? claimMapLoad() : Promise.resolve(true);
+    Promise.all([loadMapEngine(), allowedPromise]).then(
+      ([engine, allowed]) => {
+        if (cancelled) return;
+        if (!allowed) {
+          setMapStatus("paused");
+          return;
+        }
+        destroyMap = createMap(engine);
+      },
+      (error) => {
+        // The map library's code couldn't be downloaded.
+        if (cancelled) return;
+        console.error("Map failed to load:", error);
+        setMapStatus("error");
       }
-      destroyMap = createMap();
-    });
+    );
     return () => {
       cancelled = true;
       destroyMap?.();
