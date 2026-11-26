@@ -86,11 +86,31 @@ Chýbajúce krajiny ležia v najhustejšej časti Afriky a v Strednej Ázii, kde
 
 ## Výkon (meranie 2026-11-26)
 
-{{PERF}}
+Studené načítanie stránky zápasu (prázdna cache), 5 meraní, medián; všetko na Verceli, ten istý prehliadač a sieť; bajty prenesené (po kompresii) vrátane požiadaviek web workerov. Nástroje: `docs/maplibre-comparison/tools/perf.cjs` a `hero-fps.cjs`.
+
+| | Mapbox (produkcia) | MapLibre pred (PR #2) | **MapLibre teraz** |
+|---|---|---|---|
+| JavaScript | 757 KB | 513 KB | 516 KB |
+| Mapové dáta | 424 KB | 613 KB | **331 KB** |
+| Písmo názvov | 128 KB | 40 KB | 45 KB |
+| Ostatné | 113 KB | 117 KB | 117 KB |
+| **Spolu** | **1 422 KB** | **1 283 KB** | **1 009 KB** |
+| Ďalšia stránka / návšteva (dáta mapy) | podľa cache Mapboxu | overenie so serverom | **0 B** |
+| Čas do zobrazenia mapy (medián, rozptyl) | 2,41 s (2,3–4,2) | 2,56 s (2,3–3,6) | 2,83 s (2,7–3,7) |
+| Úvodná animácia pri 4× spomalenom CPU | 18 snímok/s, najdlhšia 350 ms | — | 14 snímok/s, najdlhšia 133 ms |
+
+- MapLibre stiahne o 29 % menej než Mapbox. Pri opakovanej návšteve nesťahuje dáta mapy vôbec.
+- Čas do zobrazenia je o ~0,3–0,4 s dlhší než pri Mapboxe. MapLibre musí pred prvým vykreslením rozrezať tvary celého sveta na dlaždice, kým Mapbox dostane hotové dlaždice zo servera. Rozdiely sú menšie než rozptyl medzi meraniami. Zlepšenia v tejto práci: GeoJSON ide do workera ako text (blob URL), nie kopírovaním objektu (~100 ms na hlavnom vlákne), a predvolené zjednodušovanie MapLibre pri malom priblížení (s vypnutým bolo zobrazenie o ~20 % pomalšie).
+- Úvodná animácia: priemerne o niečo menej snímok, ale rovnomernejšie (najdlhšia snímka 133 ms oproti 350 ms pri Mapboxe). Úvodná mapa má hrubšie tvary (pevný pohľad na svet, rozdiel nie je vidieť) a hotové krajiny sa už neprekresľujú. Absolútne čísla sú nízke, lebo testovacie prostredie kreslí WebGL softvérovo; porovnávať treba len medzi sebou.
 
 ## Známe rozdiely oproti Mapboxu
 
-{{DIFFS}}
+- **Detail pri veľkom priblížení:** od zoomu ~6 (Luxembursko, okolie Singapuru) sú hranice veľkých krajín a ich malé ostrovy jednoduchšie než v Mapboxe; preto je najväčšie priblíženie 7. Malé štáty samotné (Luxembursko, Malta s Gozom, Singapur, Kosovo, Lichtenštajnsko, Monako) majú tvar v poriadku. Pobrežie Nórska a Grónska je pri priblížení menej členité.
+- **Popisky:** viac krajín s popiskou, ale pri pohľade na svet menšie písmo (8–9 px pri krajinách pod 500 000 km²) a niektoré názvy posunuté vedľa svojej krajiny. Mapbox ukáže menej názvov, väčšie.
+- **Písmo:** Barlow Semi Condensed SemiBold namiesto DIN Pro (pozri vyššie). Názvy podľa `Intl` („Türkiye“, „Czechia“, „DR Congo“).
+- **Atribúcia:** „MapLibre | Natural Earth“ namiesto loga Mapbox a „© Mapbox © OpenStreetMap“.
+- **Telefón:** pri pohľade na celý svet bez názvov krajín (rovnako ako Mapbox).
+- **Hranice:** rovnaký „US“ pohľad; drobné rozdiely v priebehu hraníc (iný zdroj dát), v príslušnosti kontrolovaných sporných území žiadne.
 
 ## Ako aktualizovať dáta
 

@@ -1,19 +1,23 @@
-# Mapbox vs MapLibre: snímky z 2026-11-26
+# Mapbox vs MapLibre: snímky a nástroje
 
-Každý obrázok: vľavo **Mapbox** (produkcia, vetva `main`), vpravo **MapLibre** (vetva `maplibre-alt`, `NEXT_PUBLIC_MAP_ENGINE=maplibre`). Zápas Hamburger SV – Bayern Munich, rovnaká veľkosť okna, rovnaké priblíženie (dvojklik na to isté miesto).
+Snímky z 2026-11-26 (fáza 1 prechodu na MapLibre). Na každom obrázku je vľavo **Mapbox** (produkcia) a vpravo **MapLibre** (vetva `maplibre-default`). Zápas Hamburger SV – Bayern Munich, rovnaká veľkosť okna, rovnaké priblíženie (dvojklik na to isté miesto).
 
-- `real-votes-*` — skutočné hlasy z databázy. Pre tento zápas sú to 2 hlasy zo Slovenska, čo je pod prahom 3 (`MIN_VOTES_TO_COLOR`), takže Slovensko je šedé („nerozhodnuté“) v oboch verziách.
-- `demo-*` — **ukážkové výsledky** (54 krajín vrátane Luxemburska, Malty, Kosova, Singapuru, Monaka), podstrčené obom verziám rovnako počas snímania, aby bolo vidieť farby tímov, sýtosť podľa náskoku a malé štáty. V databáze nič nie je.
-- `home-hero-dark-light.jpg` — mapa na úvodnej stránke po animácii „rozsvietenia“: hore tmavý režim, dole svetlý; vľavo Mapbox, vpravo MapLibre.
+- `real-votes-*` — skutočné hlasy. Pre tento zápas sú to 2 hlasy zo Slovenska, pod prahom 3 (`MIN_VOTES_TO_COLOR`), takže Slovensko je v oboch verziách šedé („nerozhodnuté“).
+- `demo-*` — **ukážkové výsledky** (54 krajín vrátane malých štátov), podstrčené obom verziám rovnako len v prehliadači počas snímania. V databáze nič nie je.
+- Pohľady: celý svet, Európa, Ázia, Južná Amerika, Slovensko (s tooltipom), Luxembursko, Malta, Kosovo, Singapur; počítač (1440 × 900) a telefón (390 × 844); tmavý a svetlý režim. Plná sada (72 snímok) sa dá zopakovať nástrojmi nižšie.
+- `home-hero-dark-light.jpg` — úvodná stránka po animácii „rozsvietenia“.
+- `label-fonts.jpg` — porovnanie písiem popiskov s DIN Pro z Mapboxu (výrez pohľadu na svet, 2× zväčšené).
 
-Pohľady: celý svet, Európa, Slovensko (s tooltipom pri hoveri), Luxembursko, Malta, Kosovo, Singapur; počítač (1440×900) a telefón (390×844), tmavý a svetlý režim. Kompletná sada (56 snímok) sa dá zopakovať skriptom, ktorý je popísaný v pull requeste.
+## Nástroje (`tools/`, potrebujú Playwright s Chromiom; nie sú súčasťou appky ani `npm test`)
 
-## Ako snímky a meranie zopakovať
+| Skript | Čo robí |
+|---|---|
+| `shots.cjs <názov> <adresa> <priečinok> [demo]` | snímky všetkých pohľadov; `VIEWS=europe,malta`, `KEYS=desktop-dark` obmedzia výber |
+| `compose.py <priečinok> <výstup>` | spojí dvojice Mapbox/MapLibre vedľa seba |
+| `labels.cjs <adresa> [šírka] [výška]` | ktoré krajiny majú popisku vo svete, Európe, Ázii a Južnej Amerike a ktoré chýbajú (potrebuje `npm run dev`) |
+| `overlaps.cjs <adresa>` | či ovládacie prvky neprekrývajú popisky, na 10 veľkostiach obrazovky (`npm run dev`) |
+| `perf.cjs <názov> <adresa> [počet]` | prenesené bajty a čas do zobrazenia mapy |
+| `hero-fps.cjs <adresa> [spomalenie CPU]` | plynulosť úvodnej animácie a správanie pri obmedzenom pohybe |
+| `preview-check.cjs <adresa>` | engine, žiadne požiadavky na Mapbox, hover, hlas (zodpovedaný v prehliadači, nič sa nezapíše), prepnutie zápasu a témy, nápoveda dvoch prstov na telefóne |
 
-Skripty sú v `tools/` (potrebujú Playwright s Chromiom; nie sú súčasťou appky ani `npm test`):
-
-- `node tools/shots.cjs <mapbox|maplibre> <adresa appky> <priečinok> [demo]` — všetky pohľady; `demo` podstrčí ukážkové výsledky. Filtrovať sa dá premennými `VIEWS=europe,malta` a `KEYS=desktop-dark`.
-- `python3 tools/compose.py <priečinok so snímkami> <výstup>` — spojí dvojice vedľa seba.
-- `node tools/perf.cjs <názov> <adresa> [počet]` — prenesené bajty a čas do zobrazenia mapy.
-
-Pozor: snímanie produkcie (Mapbox) pripočíta spustenia do produkčného počítadla mapy, každý pohľad jedno.
+Chránený preview: adresa so `?_vercel_share=…`. Pozor: snímanie produkcie pri Mapboxe pripočíta spustenia do produkčného počítadla mapy (každý pohľad jedno).
