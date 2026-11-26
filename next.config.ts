@@ -15,9 +15,10 @@ const nextConfig: NextConfig = {
     const immutable = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
     return [
       { source: "/data/:path*", headers: immutable },
-      // Label glyphs: protocol buffers (as Mapbox serves them), so the CDN
-      // knows the type instead of a generic binary download.
-      { source: "/fonts/:path*", headers: [...immutable, { key: "Content-Type", value: "application/x-protobuf" }] },
+      // Glyphs keep the default type: measured on Vercel, .pbf as
+      // application/octet-stream is sent compressed (40 KB), as
+      // application/x-protobuf it is not (74 KB).
+      { source: "/fonts/:path*", headers: immutable },
     ];
   },
   cacheComponents: true,

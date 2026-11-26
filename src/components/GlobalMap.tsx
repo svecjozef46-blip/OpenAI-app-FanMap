@@ -339,15 +339,16 @@ export function GlobalMap({
   return (
     <div className="relative h-full w-full" data-map-status={mapStatus}>
       {/* Hidden until the map has drawn the world with its colors, then
-          faded in: no empty map first, no colors repainted after. */}
+          faded in: no empty map first, no colors repainted after. The fade
+          is on a wrapper: the map library adds its own classes to the
+          container itself, which a changing className would wipe out. */}
       <div
-        ref={containerRef}
-        role="region"
-        aria-label="World map: the team each country supports"
         className={`h-full w-full transition-opacity duration-500 ease-out motion-reduce:transition-none ${
           mapStatus === "ready" ? "opacity-100" : "opacity-0"
         }`}
-      />
+      >
+        <div ref={containerRef} role="region" aria-label="World map: the team each country supports" className="h-full w-full" />
+      </div>
       {mapStatus !== "ready" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center">
           {mapStatus === "paused" ? (
