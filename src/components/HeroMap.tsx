@@ -67,6 +67,10 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     const start = performance.now();
     const fadeOutMs = previous ? FADE_OUT_MS : 0;
     let switched = false;
+    // Countries done lighting up aren't touched again: each update makes
+    // the map redo that country's colors, so skipping them keeps the later
+    // part of the animation light.
+    const finished = new Set<number>();
     const tick = (now: number) => {
       const elapsed = now - start;
       let done = true;
@@ -82,8 +86,10 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
         }
         const t0 = elapsed - fadeOutMs;
         next.countries.forEach((c, i) => {
+          if (finished.has(i)) return; // already at its final color
           const t = (t0 - i * STAGGER_MS) / FADE_IN_MS;
           if (t < 1) done = false;
+          else finished.add(i);
           if (t > 0) setCountry(c, colorOf(next, c), 1 - Math.pow(1 - Math.min(t, 1), 3));
         });
       }
@@ -133,6 +139,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     map.on("load", () => {
       engine.setupLayers(map, { withHover: false, countryLabels: false, theme: latestRef.current.theme });
       loadedRef.current = true;
+      container.dataset.mapStatus = "ready"; // for tests and measurements
       showSlide(latestRef.current.slide);
     });
 

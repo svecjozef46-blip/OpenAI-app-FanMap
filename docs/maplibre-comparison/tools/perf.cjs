@@ -9,7 +9,7 @@ const runs = Number(runsArg ?? 5);
 const MATCH = "bffd1947-5f1a-4825-89db-ea47f82443ae";
 function category(url, type) {
   if (/\/fonts\/v1\/|\/fonts\/.*\.pbf/.test(url)) return "map font (glyphs)";
-  if (/mapbox\.com|\/data\/.*geojson/.test(url)) return "map data (style, tiles, shapes)";
+  if (/mapbox\.com|\/data\/.*(geojson|\.json)/.test(url)) return "map data (style, tiles, shapes)";
   if (type === "script") return "JavaScript";
   return "other (page, CSS, web fonts, API)";
 }

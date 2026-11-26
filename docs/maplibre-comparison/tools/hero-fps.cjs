@@ -12,11 +12,15 @@ async function run(browser, reducedMotion) {
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: slowdown });
-  // Count animation frames from the moment the map's canvas appears.
+  // Count animation frames from the moment the map has loaded (HeroMap
+  // marks its container; the old Mapbox version doesn't, so for it the
+  // count starts when the canvas appears).
   await page.addInitScript(() => {
     window.__frames = [];
     const loop = (t) => {
-      if (document.querySelector("canvas")) window.__frames.push(t);
+      const ready = document.querySelector('[data-map-status="ready"]') ??
+        (!document.querySelector("[data-map-status]") && document.querySelector(".mapboxgl-canvas"));
+      if (ready) window.__frames.push(t);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

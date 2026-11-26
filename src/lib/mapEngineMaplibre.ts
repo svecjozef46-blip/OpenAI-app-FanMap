@@ -51,7 +51,12 @@ const asset = (path: string) => window.location.origin + path;
 // <link rel="preload"> (preloadMapData in lib/mapEngine.ts), which this
 // plain fetch() picks up. The shapes arrive as compact TopoJSON and are
 // turned into the GeoJSON MapLibre draws.
-type CountryData = { countries: GeoJSON.FeatureCollection; labels: GeoJSON.FeatureCollection };
+//
+// MapLibre cuts the shapes into tiles in a web worker. Handing it the
+// GeoJSON as an object means copying ~110,000 points to the worker on the
+// main thread (~100 ms, several times that on a phone). Instead the GeoJSON
+// becomes text in a blob: URL, which the worker fetches and parses itself.
+type CountryData = { countriesUrl: string; labels: GeoJSON.FeatureCollection };
 let countryData: CountryData | null = null;
 let loadingData: Promise<CountryData> | null = null;
 
@@ -61,13 +66,29 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+// TopoJSON decodes to long fractions (12.345678901…); 4 decimals (~10 m)
+// is far below what the map shows and halves the text handed to the worker.
+function roundCoordinates(collection: GeoJSON.FeatureCollection) {
+  const round = (ring: number[][]) => {
+    for (const point of ring) {
+      point[0] = Math.round(point[0] * 1e4) / 1e4;
+      point[1] = Math.round(point[1] * 1e4) / 1e4;
+    }
+  };
+  for (const f of collection.features) {
+    const g = f.geometry;
+    if (g.type === "Polygon") g.coordinates.forEach(round);
+    else if (g.type === "MultiPolygon") g.coordinates.forEach((polygon) => polygon.forEach(round));
+  }
+}
+
 export function loadCountryData(): Promise<CountryData> {
   loadingData ??= Promise.all([fetchJson<Topology>(COUNTRIES_URL), fetchJson<GeoJSON.FeatureCollection>(COUNTRY_LABELS_URL)])
     .then(([topology, labels]) => {
-      countryData = {
-        countries: feature(topology, topology.objects.countries) as GeoJSON.FeatureCollection,
-        labels,
-      };
+      const countries = feature(topology, topology.objects.countries) as GeoJSON.FeatureCollection;
+      roundCoordinates(countries);
+      const blob = new Blob([JSON.stringify(countries)], { type: "application/json" });
+      countryData = { countriesUrl: URL.createObjectURL(blob), labels };
       return countryData;
     })
     .catch((error) => {
@@ -126,7 +147,15 @@ const labelLayer: maplibregl.LayerSpecification = {
   },
 };
 
-function buildStyle({ withHover, countryLabels }: { withHover: boolean; countryLabels: boolean }) {
+function buildStyle({
+  withHover,
+  countryLabels,
+  interactive,
+}: {
+  withHover: boolean;
+  countryLabels: boolean;
+  interactive: boolean;
+}) {
   if (!countryData) throw new Error("loadCountryData() must finish before a map is created");
   const layers = countryLayers({}, { withHover }) as unknown as maplibregl.LayerSpecification[];
   const style: maplibregl.StyleSpecification = {
@@ -136,13 +165,19 @@ function buildStyle({ withHover, countryLabels }: { withHover: boolean; countryL
     sources: {
       [COUNTRY_SOURCE_ID]: {
         type: "geojson",
-        data: countryData.countries,
+        data: countryData.countriesUrl,
         // ISO alpha-2 code as feature id, like `iso_3166_1` on Mapbox — the
         // format votes.country_code uses.
         promoteId: "code",
         attribution: ATTRIBUTION,
-        // Shapes are already simplified at build time; keep them as they are.
-        tolerance: 0.2,
+        // Interactive map: MapLibre's default simplification per zoom level
+        // (it only drops detail smaller than a pixel); turning it down made
+        // the world view draw ~20% slower for no visible gain.
+        // Home-page map (fixed world view, colors animated every frame):
+        // coarser shapes and no tiles past zoom 3, so recoloring ~100
+        // countries per frame stays smooth on slower phones.
+        // Measured 2026-11-26, docs/maplibre.md.
+        ...(interactive ? { tolerance: 0.375 } : { tolerance: 1.5, maxzoom: 3 }),
       },
     },
     // No background layer: transparent oceans, the page shows through.
@@ -172,7 +207,7 @@ export const maplibreEngine: MapEngine = {
   createMap({ container, interactive, attribution, cooperativeGestures, withHover, countryLabels }) {
     const map = new maplibregl.Map({
       container,
-      style: buildStyle({ withHover, countryLabels }),
+      style: buildStyle({ withHover, countryLabels, interactive }),
       renderWorldCopies: false,
       bounds: WORLD_BOUNDS,
       maxZoom: MAPLIBRE_MAX_ZOOM,

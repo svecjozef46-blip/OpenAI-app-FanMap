@@ -38,8 +38,8 @@ Všetko vyrába `node scripts/build-countries.mjs` (zdroje si raz stiahne do `sc
 | | Pred (2026-11-26, PR #2) | Po |
 |---|---|---|
 | Tvary krajín | 620 KB (GeoJSON, `max-age=0, must-revalidate`) | **329 KB** (TopoJSON, `immutable`) |
-| Popisky | 6 KB | 7 KB |
-| Glyphs | 41 KB (Open Sans) | {{GLYPHS_KB}} KB (Barlow) |
+| Popisky | 6 KB | 8 KB |
+| Glyphs | 41 KB (Open Sans) | 44 KB (Barlow) |
 | Pri ďalšej stránke / návšteve | overenie každého súboru so serverom | 0 B (cache prehliadača) |
 
 ## Tvary krajín
@@ -53,9 +53,9 @@ Všetko vyrába `node scripts/build-countries.mjs` (zdroje si raz stiahne do `sc
 
 ## Popisky krajín
 
-- **Štýl zrkadlí Mapbox `dark-v11`** (vrstva `country-label`, prečítaná zo štýlu, ktorý načítava naša Mapbox mapa): bez veľkých kapitálok a rozostupov, 11 / 9 / 8 px pri zoome 1 podľa poradia krajiny (`symbolrank` = `LABELRANK` z Natural Earth) až 22 / 19 / 17 px pri zoome 9 po rovnakej krivke, šírka 6 em, výška riadku 1,1, obrys 1,25, žiadne popisky pod zoomom 1 (celý svet na telefóne).
-- **Poradie podľa dôležitosti:** pri kolízii vyhrá väčšia krajina (`symbol-sort-key` = plocha). Kedy sa popiska objaví, určuje plocha: krajiny nad 100 000 km² už pri pohľade na celý svet, 50–100 tisíc od zoomu 2, menšie postupne, mikroštáty od zoomu 5; menšie závislé územia o úroveň neskôr.
-- **Poloha:** ručne umiestnené body Natural Earth (`LABEL_X/Y`, nie ťažisko), s opravami pre Taliansko, Chorvátsko a Nórsko. Keď popiska na bode nemá miesto, môže sa posunúť tesne vedľa neho (ako v Mapboxe). Vďaka tomu je pri pohľade na celý svet popísaných 94 krajín namiesto 67.
+- **Štýl zrkadlí Mapbox `dark-v11`** (vrstva `country-label`, prečítaná zo štýlu, ktorý načítava naša Mapbox mapa): bez veľkých kapitálok a rozostupov, 11 / 9 / 8 px pri zoome 1 podľa poradia krajiny (`symbolrank` = `LABELRANK` z Natural Earth) až 22 / 19 / 17 px pri zoome 9 po rovnakej krivke, šírka 6 em, výška riadku 1,1, obrys 1,25, žiadne popisky na telefóne (celý svet je tam pod zoomom 0). Mapbox začína pri zoome 1; my pri 0,75, inak by notebook 1280 × 720 (svet pri zoome ~0,9) nemal žiadnu popisku. Najväčšie písmo (11 px) dostanú len krajiny nad 500 000 km².
+- **Poradie podľa dôležitosti:** pri kolízii vyhrá väčšia krajina (`symbol-sort-key` = plocha). Deväť futbalových krajín v preplnených oblastiach (Kamerun, Ghana, Senegal, Pobrežie Slonoviny, Nigéria, Tunisko, Južná Kórea, Uruguaj, Kostarika) má prednosť, akoby boli štyrikrát väčšie, inak by ich vytlačili plošne väčší, futbalovo tichší susedia. Kedy sa popiska objaví, určuje plocha: krajiny nad 100 000 km² už pri pohľade na celý svet, 50–100 tisíc od zoomu 2, menšie postupne, mikroštáty od zoomu 5; menšie závislé územia o úroveň neskôr.
+- **Poloha:** ručne umiestnené body Natural Earth (`LABEL_X/Y`, nie ťažisko), s opravami pre Taliansko, Chorvátsko a Nórsko. Keď popiska na bode nemá miesto, môže sa posunúť tesne vedľa neho (ako v Mapboxe). Vďaka tomu je pri pohľade na celý svet (1440 × 900) popísaných 97 krajín namiesto 67.
 - **Zdroj popiskov bez okraja dlaždice (`buffer: 0`):** s okrajom sa bod blízko hrany dlaždice (rovník, nultý poludník) dostal do dvoch dlaždíc a s `symbol-sort-key` jedna kópia vyradila druhú. Tak zmizli napr. Tanzánia, Ekvádor či Spojené kráľovstvo.
 - **Písmo: Barlow Semi Condensed SemiBold** (SIL Open Font License 1.1, text licencie je pri glyphs). DIN Pro z Mapboxu je licencované a mimo Mapboxu sa použiť nedá. Porovnané na rovnakom výreze proti DIN Pro: Open Sans Semibold (pôvodné; široké, „štandardné“), Barlow Condensed Medium (príliš úzke), Barlow Semi Condensed Medium (tenšie než DIN) a SemiBold. SemiBold má najbližšiu hrúbku aj šírku a dobre sa číta aj pri 8 px. Glyphs vyrába `scripts/build-glyphs.mjs` priamo z TTF súboru Google Fonts (pevný commit), v čistom Node bez prehliadača.
 - **Názvy** z `Intl.DisplayNames` (rovnaký zdroj ako tooltip), s pár skráteniami („DR Congo“, „Bosnia and Herzegovina“…).
@@ -66,9 +66,12 @@ Všetko vyrába `node scripts/build-countries.mjs` (zdroje si raz stiahne do `sc
 
 | Pohľad | Popísaných | Chýba (nad prahom plochy) |
 |---|---|---|
-{{LABEL_TABLE}}
+| Celý svet (zoom 1,13), prah 100 000 km² | 97 | Gabon, Malawi, Zambia, Benin, Central African Rep., Eritrea, Laos, South Sudan, Tajikistan, Burkina Faso |
+| Európa (zoom 3,13), prah 10 000 km² | 55 | Kosovo |
+| Ázia (zoom 2,13), prah 50 000 km² | 85 | Gabon, Malawi, Bosnia and Herzegovina, Central African Rep. |
+| Južná Amerika (zoom 2,13), prah 50 000 km² | 55 | Gabon, Central African Rep., Togo, French Guiana |
 
-Chýbajúce krajiny pri pohľade na svet ležia v hustej strednej Afrike a v Strednej Ázii, kde sa popisky fyzicky nezmestia. Mapbox ich v rovnakom pohľade tiež nemá; objavia sa pri prvom priblížení.
+Chýbajúce krajiny ležia v najhustejšej časti Afriky a v Strednej Ázii, kde sa pri tejto veľkosti písma fyzicky nezmestia (aj Mapbox ich v rovnakom pohľade vynecháva) a objavia sa pri prvom priblížení. Na 1920 × 1080 chýbajú pri pohľade na svet len Malawi a Ghana (105 popiskov), na 1280 × 720 je ich 94. Úplné zoznamy popísaných krajín sú v pull requeste.
 
 ## Pohyb a správanie
 
