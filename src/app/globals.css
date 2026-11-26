@@ -187,3 +187,10 @@ body {
   color: var(--muted);
   margin-top: 2px;
 }
+
+/* "Loading the map…" (GlobalMap.tsx): appears only after 0.8 s, so a quick
+   load shows nothing but the map fading in. */
+.fanmap-map-loading {
+  opacity: 0;
+  animation: fadeIn 300ms ease-out 800ms forwards;
+}

@@ -5,7 +5,7 @@ import type mapboxgl from "mapbox-gl";
 import type { HeroCountry } from "@/lib/heroPreview";
 import { useTheme } from "@/lib/theme";
 import { applyMapPalette, fitWorld } from "@/lib/mapSetup";
-import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, type MapEngine } from "@/lib/mapEngine";
+import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, preloadMapData, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad } from "@/lib/mapBudget";
 
 const FADE_IN_MS = 700; // one country fading in
@@ -27,6 +27,8 @@ const colorOf = (s: HeroSlide, c: HeroCountry) => (c.side === "home" ? s.homeCol
 // it's a picture, and keeping it simple keeps the home page light.
 export function HeroMap({ slide }: { slide: HeroSlide }) {
   const theme = useTheme();
+  // Start downloading the map data with the page (MapLibre only).
+  preloadMapData({ labels: false });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const engineRef = useRef<MapEngine | null>(null);
@@ -132,6 +134,18 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       engine.setupLayers(map, { withHover: false, countryLabels: false, theme: latestRef.current.theme });
       loadedRef.current = true;
       showSlide(latestRef.current.slide);
+    });
+
+    // After the browser gives back a lost graphics context (iOS Safari in
+    // the background), the colors are gone: light the countries up again.
+    // MapLibre reloads its whole style on restore, so wait until that's done.
+    map.on("webglcontextrestored", () => {
+      if (!loadedRef.current) return;
+      map.once("idle", () => {
+        applyMapPalette(map, latestRef.current.theme);
+        shownRef.current = null;
+        showSlide(latestRef.current.slide);
+      });
     });
 
     return () => {

@@ -132,6 +132,7 @@ export function MatchExperience({
               <button
                 type="button"
                 onClick={() => setSidebarOpen((open) => !open)}
+                data-map-overlay="sidebar-button"
                 className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-glass text-muted shadow-float backdrop-blur-xl transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent md:flex"
                 aria-label={sidebarOpen ? "Hide match list" : "Show match list"}
                 aria-expanded={sidebarOpen}
@@ -140,7 +141,7 @@ export function MatchExperience({
               </button>
             )}
             {/* Header stays compact and centred, so most of the map stays visible. */}
-            <div className="mx-auto min-w-0 max-w-[720px] flex-1">
+            <div className="mx-auto min-w-0 max-w-[720px] flex-1" data-map-overlay="header">
               <MatchHeader match={selectedMatch} results={results} forceClosed={isSingle} />
             </div>
             {/* Balances the sidebar toggle so the header stays centred. */}
@@ -166,10 +167,10 @@ export function MatchExperience({
               under the map (roughly below Africa on the world view). Kept
               above the Mapbox logo/attribution row. */}
           <div className="pointer-events-none absolute inset-x-3 bottom-9 hidden grid-cols-[1fr_auto_1fr] items-end gap-3 md:grid">
-            <div className="pointer-events-auto justify-self-start">
+            <div className="pointer-events-auto justify-self-start" data-map-overlay="legend">
               <MapInsights match={selectedMatch} results={results} />
             </div>
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto" data-map-overlay="share">
               <ShareBar match={selectedMatch} />
             </div>
           </div>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks that every country code that votes are stored with has a shape on
-// the MapLibre map (public/data/countries.geojson, built by
+// the MapLibre map (public/data/countries.<hash>.topo.json, built by
 // scripts/build-countries.mjs). A code without a shape means votes from that
 // country would count but never color the map.
 //
@@ -20,8 +20,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const countries = JSON.parse(await readFile(path.join(ROOT, "public/data/countries.geojson"), "utf8"));
-const onMap = new Set(countries.features.map((f) => f.properties.code));
+// The file the app loads (its name is in the generated src/lib/mapAssets.ts).
+const assets = await readFile(path.join(ROOT, "src/lib/mapAssets.ts"), "utf8");
+const countriesUrl = assets.match(/COUNTRIES_URL = "([^"]+)"/)[1];
+const topology = JSON.parse(await readFile(path.join(ROOT, "public", countriesUrl), "utf8"));
+const onMap = new Set(topology.objects.countries.geometries.map((g) => g.properties.code));
 
 // Codes intentionally or unavoidably without a shape.
 const KNOWN_GAPS = {

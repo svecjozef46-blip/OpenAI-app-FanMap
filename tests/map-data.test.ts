@@ -1,17 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { feature } from "topojson-client";
 
-// The MapLibre version of the map (NEXT_PUBLIC_MAP_ENGINE=maplibre) draws
-// countries from files in public/, built by scripts/build-countries.mjs.
-// These checks catch a broken rebuild before it reaches the map.
+// The MapLibre map (the default engine) draws countries from files in
+// public/, built by scripts/build-countries.mjs, whose current names are in
+// src/lib/mapAssets.ts. These checks catch a broken rebuild before it
+// reaches the map.
 
 type Feature = { properties: Record<string, unknown>; geometry: { type: string; coordinates: unknown } };
-const read = (path: string) =>
-  JSON.parse(readFileSync(new URL(`../public/${path}`, import.meta.url), "utf8")) as { features: Feature[] };
+const readJson = (path: string) => JSON.parse(readFileSync(new URL(`../public/${path}`, import.meta.url), "utf8"));
+const read = (path: string) => readJson(path) as { features: Feature[] };
 
-const countries = read("data/countries.geojson").features;
-const labels = read("data/country-labels.geojson").features;
+// The names the app loads (the generated module is plain constants).
+const assets = Object.fromEntries(
+  [...readFileSync(new URL("../src/lib/mapAssets.ts", import.meta.url), "utf8").matchAll(/export const (\w+) = "([^"]+)"/g)].map(
+    (m) => [m[1], m[2]]
+  )
+);
+// The shapes are TopoJSON; turned into GeoJSON the same way the app does it.
+const topology = readJson(assets.COUNTRIES_URL.slice(1));
+const countries = (feature(topology, topology.objects.countries) as unknown as { features: Feature[] }).features;
+const labels = read(assets.COUNTRY_LABELS_URL.slice(1)).features;
 const codes = countries.map((f) => f.properties.code as string);
 
 test("every country shape has a unique ISO alpha-2 code (the format of votes.country_code)", () => {
@@ -55,8 +65,32 @@ test("every country has one label, and the font has every character the labels u
     assert.ok(name.length > 0);
     for (const ch of name) {
       const start = Math.floor(ch.codePointAt(0)! / 256) * 256;
-      const file = new URL(`../public/fonts/Open Sans Semibold/${start}-${start + 255}.pbf`, import.meta.url);
+      const glyphs = assets.GLYPHS_URL.replace("{fontstack}", assets.LABEL_FONT).replace("{range}", `${start}-${start + 255}`);
+      const file = new URL(`../public${glyphs}`, import.meta.url);
       assert.ok(existsSync(file), `missing glyphs for "${ch}" in ${name}`);
     }
+  }
+});
+
+test("the files the app asks for exist, and no file of an older build is left", () => {
+  for (const url of [assets.COUNTRIES_URL, assets.COUNTRY_LABELS_URL]) {
+    assert.ok(existsSync(new URL(`../public${url}`, import.meta.url)), url);
+  }
+  // Names carry a content hash and are cached for a year (next.config.ts):
+  // exactly one version of each file may be published.
+  assert.equal(readdirSync(new URL("../public/data", import.meta.url)).length, 2);
+  assert.equal(readdirSync(new URL("../public/fonts", import.meta.url)).length, 1);
+});
+
+test("every country over 100,000 km² is labelled from world view, bigger ones placed first", () => {
+  for (const f of labels) {
+    const { name, area, minzoom } = f.properties as { name: string; area: number; minzoom: number };
+    assert.equal(typeof area, "number", name);
+    // The label layer starts at zoom 1, so minzoom 0 = shown at world view.
+    if (area >= 100_000) assert.equal(minzoom, 0, `${name} (${area} km²) must be named at world view`);
+  }
+  for (const code of ["IT", "UA", "BY", "GR", "MA", "MG", "AF", "TM", "CM", "BR", "AR", "IN", "CN", "NG"]) {
+    const f = labels.find((l) => l.properties.code === code)!;
+    assert.equal(f.properties.minzoom, 0, code);
   }
 });
