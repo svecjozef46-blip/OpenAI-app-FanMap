@@ -1,7 +1,7 @@
 import type mapboxgl from "mapbox-gl";
 import type { Theme } from "@/lib/theme";
 
-// Shared Mapbox setup used by both maps in the app: the interactive match
+// Shared map setup used by both maps in the app: the interactive match
 // map (components/GlobalMap.tsx) and the decorative home-page map
 // (components/HeroMap.tsx). Kept in one place so both always look the same.
 //
@@ -17,7 +17,9 @@ export const LAND_LAYER_ID = "country-land";
 export const FILL_LAYER_ID = "country-fills";
 export const BORDER_LAYER_ID = "country-borders";
 export const HOVER_LAYER_ID = "country-hover";
-const LABEL_LAYER_ID = "country-label"; // from the Mapbox base style
+// Country names: from the Mapbox base style, or our own layer of the same
+// id in the MapLibre style (lib/mapEngineMaplibre.ts).
+export const LABEL_LAYER_ID = "country-label";
 
 // Mapbox's maintained country-boundaries tileset. `iso_3166_1` (ISO alpha-2,
 // e.g. "SK") is promoted as the feature id — the same format
@@ -147,29 +149,27 @@ export function tidyBaseStyle(map: mapboxgl.Map, { keepCountryLabels }: { keepCo
   return labelLayerId;
 }
 
-// Adds our layers, bottom to top: land, team-color fills, borders and
+// Our layers, bottom to top: land, team-color fills, borders and
 // (interactive map only) the hover outline. Colors come from
 // applyMapPalette(); per-country team colors from feature-state
 // (`fillColor`, `lineColor`, `opacity`, `hover`), set by the map components.
-export function addCountryLayers(
-  map: mapboxgl.Map,
-  { beforeId, withHover }: { beforeId: string | undefined; withHover: boolean }
-) {
-  map.addSource(COUNTRY_SOURCE_ID, {
-    type: "vector",
-    url: COUNTRY_TILESET_URL,
-    promoteId: "iso_3166_1",
-  });
-
+// Shared by both engines (lib/mapEngine.ts): Mapbox adds them on top of its
+// base style (addCountryLayers below), MapLibre builds its whole style from
+// them (lib/mapEngineMaplibre.ts). `source` says where the shapes come from:
+// a layer of a vector tileset (Mapbox) or a plain GeoJSON source (MapLibre).
+type CountrySource = { sourceLayer?: string; filter?: mapboxgl.FilterSpecification };
+export function countryLayers(
+  { sourceLayer, filter }: CountrySource,
+  { withHover }: { withHover: boolean }
+): mapboxgl.LayerSpecification[] {
   const common = {
     source: COUNTRY_SOURCE_ID,
-    "source-layer": COUNTRY_SOURCE_LAYER,
-    filter: WORLDVIEW_FILTER,
+    ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
+    ...(filter ? { filter } : {}),
   } as const;
 
-  map.addLayer({ id: LAND_LAYER_ID, type: "fill", ...common, paint: { "fill-color": "#1c1c1e" } }, beforeId);
-
-  map.addLayer(
+  const layers: mapboxgl.LayerSpecification[] = [
+    { id: LAND_LAYER_ID, type: "fill", ...common, paint: { "fill-color": "#1c1c1e" } },
     {
       id: FILL_LAYER_ID,
       type: "fill",
@@ -185,33 +185,42 @@ export function addCountryLayers(
         ],
       },
     },
-    beforeId
-  );
-
-  map.addLayer(
     {
       id: BORDER_LAYER_ID,
       type: "line",
       ...common,
       paint: { "line-color": "#000000", "line-width": 0.7 },
     },
-    beforeId
-  );
+  ];
 
   if (withHover) {
-    map.addLayer(
-      {
-        id: HOVER_LAYER_ID,
-        type: "line",
-        ...common,
-        paint: {
-          "line-color": "#ffffff",
-          "line-width": 1.4,
-          "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.9, 0],
-        },
+    layers.push({
+      id: HOVER_LAYER_ID,
+      type: "line",
+      ...common,
+      paint: {
+        "line-color": "#ffffff",
+        "line-width": 1.4,
+        "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.9, 0],
       },
-      beforeId
-    );
+    });
+  }
+  return layers;
+}
+
+// Mapbox: adds the country source and our layers underneath the base
+// style's country labels (`beforeId`, from tidyBaseStyle).
+export function addCountryLayers(
+  map: mapboxgl.Map,
+  { beforeId, withHover }: { beforeId: string | undefined; withHover: boolean }
+) {
+  map.addSource(COUNTRY_SOURCE_ID, {
+    type: "vector",
+    url: COUNTRY_TILESET_URL,
+    promoteId: "iso_3166_1",
+  });
+  for (const layer of countryLayers({ sourceLayer: COUNTRY_SOURCE_LAYER, filter: WORLDVIEW_FILTER }, { withHover })) {
+    map.addLayer(layer, beforeId);
   }
 }
 

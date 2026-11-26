@@ -27,6 +27,7 @@ Appka beží na `http://localhost:3000`.
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — z Supabase projektu (Project Settings → API). Appka nikde nepoužíva service-role kľúč — pozri "Databáza" nižšie, prečo to nie je potrebné.
 - `NEXT_PUBLIC_MAPBOX_TOKEN` — verejný (public) Mapbox token.
+- `NEXT_PUBLIC_MAP_ENGINE` — voliteľné. Prázdne alebo `mapbox` = mapa cez Mapbox (predvolené). `maplibre` = bezplatná verzia cez MapLibre bez tokenu a bez mesačného limitu spustení; dáta a písmo sú v `public/`. Číta sa pri builde, po zmene treba nasadiť znova. Podrobnosti v `docs/maplibre.md`.
 - `FANMAP_VOTE_SECRET` — **povinné pre hlasovanie.** Dlhý náhodný reťazec, ktorým server dokazuje databáze, že hlas ide z našej appky. Pozri „Hlasovanie a bezpečnosť“ nižšie.
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` a `TURNSTILE_SECRET_KEY` — kľúče Cloudflare Turnstile (overenie, že hlasuje človek). **Na produkcii povinné.** Lokálne môžu ostať prázdne, overenie je potom vypnuté. Pozri „Hlasovanie a bezpečnosť“ nižšie.
 - `FANMAP_DEV_COUNTRY` — voliteľné, len pre lokálny vývoj. V produkcii (na Vercel) appka pozná krajinu hlasujúceho automaticky (hlavička `x-vercel-ip-country`), lokálne táto hlavička neexistuje, takže bez tejto premennej by `npm run dev` hlasovanie odmietal s `country_unknown`. Nastav na 2-písmenový kód krajiny, napr. `SK`.
@@ -138,7 +139,7 @@ Kľúčové komponenty (`src/components/`):
 - `MatchExperience.tsx` — vlastník stavu `selectedMatchId`. Zoznam zápasov, hlavička aj mapa sa pri prepnutí zápasu nikdy neremountujú, menia sa len props.
 - `MatchCard.tsx` — karta zápasu v zozname = **tu sa hlasuje**. Obsahuje tri samostatné, nevnorené tlačidlá: domáci tím, hosťujúci tím (hlas = „tomuto tímu fandím“, nie tip na víťaza) a „View map“ (len výber zápasu, nikdy nehlasuje). Samotná karta nemá žiadny klik. Logika hlasovania je v `src/lib/useVote.ts`. Pozri `docs/dev-prompt-chatgpt.md` „CRITICAL INTERACTION RULES“.
 - `MatchHeader.tsx` — tenká lišta nad mapou, len zobrazuje (počty, percentá, fajka pri tíme, ktorému fandíš).
-- `GlobalMap.tsx` — interaktívna 2D mapa (Mapbox, Mercator, bez Antarktídy). Inštancia sa vytvorí raz; nové výsledky menia len `feature-state`. Sýtosť farby krajiny = sila podpory. Spoločné nastavenia máp sú v `src/lib/mapSetup.ts`, zobrazovacie farby tímov v `src/lib/teamColors.ts`.
+- `GlobalMap.tsx` — interaktívna 2D mapa (Mapbox, Mercator, bez Antarktídy). Inštancia sa vytvorí raz; nové výsledky menia len `feature-state`. Sýtosť farby krajiny = sila podpory. Spoločné nastavenia máp sú v `src/lib/mapSetup.ts`, výber knižnice (Mapbox alebo MapLibre) v `src/lib/mapEngine.ts`, zobrazovacie farby tímov v `src/lib/teamColors.ts`.
 - `ShareBar.tsx` — zdieľanie (X, Facebook, WhatsApp, Reddit, kopírovanie odkazu) dole na mape.
 - `HeroMap.tsx` — dekoratívna mapa na landing page. Kým má zápas málo hlasov, ukazuje **ilustračný** vzor (`src/lib/heroPreview.ts`), ktorý je na stránke tak aj označený.
 - `MapInsights.tsx` — legenda a top krajiny pre každý tím.

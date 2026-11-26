@@ -1,22 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import type mapboxgl from "mapbox-gl";
 import type { HeroCountry } from "@/lib/heroPreview";
 import { useTheme } from "@/lib/theme";
-import {
-  COUNTRY_SOURCE_ID,
-  COUNTRY_SOURCE_LAYER,
-  MAP_STYLE,
-  PROJECTION,
-  WORLD_BOUNDS,
-  addCountryLayers,
-  applyMapPalette,
-  fitWorld,
-  getMapboxToken,
-  tidyBaseStyle,
-} from "@/lib/mapSetup";
+import { applyMapPalette, fitWorld } from "@/lib/mapSetup";
+import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad } from "@/lib/mapBudget";
 
 const FADE_IN_MS = 700; // one country fading in
@@ -30,7 +19,7 @@ const colorOf = (s: HeroSlide, c: HeroCountry) => (c.side === "home" ? s.homeCol
 // Decorative, non-interactive world map on the home page. Each time `slide`
 // changes (the showcase rotates to another match, or the visitor switches
 // light/dark mode), the previous colors fade out and the countries "light
-// up" one after another, west → east. The Mapbox instance is created once
+// up" one after another, west → east. The map instance is created once
 // and reused for every slide. Visitors who prefer reduced motion get each
 // finished map immediately.
 //
@@ -40,6 +29,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
   const theme = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const engineRef = useRef<MapEngine | null>(null);
   const loadedRef = useRef(false);
   const frameRef = useRef(0);
   // The slide whose countries are currently colored (null = none yet).
@@ -48,19 +38,18 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
   const latestRef = useRef({ slide, theme });
 
   function setCountry(c: HeroCountry, color: string | null, progress: number) {
-    mapRef.current?.setFeatureState(
-      { source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id: c.code },
-      {
-        fillColor: color,
-        // Border lights up together with the fill.
-        lineColor: progress > 0.5 ? color : null,
-        opacity: (0.42 + c.strength * 0.5) * progress,
-      }
-    );
+    const engine = engineRef.current;
+    if (!engine) return;
+    mapRef.current?.setFeatureState(engine.country(c.code), {
+      fillColor: color,
+      // Border lights up together with the fill.
+      lineColor: progress > 0.5 ? color : null,
+      opacity: (0.42 + c.strength * 0.5) * progress,
+    });
   }
 
   // Fade out whatever is shown, then light up `next`. Driven frame by frame
-  // because Mapbox doesn't animate feature-state changes on its own.
+  // because the map libraries don't animate feature-state changes on its own.
   function showSlide(next: HeroSlide) {
     if (!loadedRef.current) return;
     cancelAnimationFrame(frameRef.current);
@@ -110,24 +99,20 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slide, theme]);
 
-  function createMap(): (() => void) | undefined {
-    const token = getMapboxToken();
+  function createMap(engine: MapEngine): (() => void) | undefined {
     const container = containerRef.current;
-    if (!token || !container) return undefined;
+    if (!engine.isConfigured() || !container) return undefined;
 
-    mapboxgl.accessToken = token;
-    const map = new mapboxgl.Map({
+    // Resizing is handled by the ResizeObserver below.
+    const map = engine.createMap({
       container,
-      style: MAP_STYLE,
-      projection: PROJECTION,
-      renderWorldCopies: false,
-      bounds: WORLD_BOUNDS,
       interactive: false,
-      attributionControl: false,
-      trackResize: false, // handled by the ResizeObserver below
+      attribution: "compact",
+      withHover: false,
+      countryLabels: false,
     });
+    engineRef.current = engine;
     mapRef.current = map;
-    map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
 
     // Keep the whole world in view at any size, leaving room for what
     // HeroShowcase floats over the map: on desktop the headline in the
@@ -144,9 +129,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     resizeObserver.observe(container);
 
     map.on("load", () => {
-      const beforeId = tidyBaseStyle(map, { keepCountryLabels: false });
-      addCountryLayers(map, { beforeId, withHover: false });
-      applyMapPalette(map, latestRef.current.theme);
+      engine.setupLayers(map, { withHover: false, countryLabels: false, theme: latestRef.current.theme });
       loadedRef.current = true;
       showSlide(latestRef.current.slide);
     });
@@ -156,6 +139,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
+      engineRef.current = null;
       loadedRef.current = false;
       shownRef.current = null;
     };
@@ -165,13 +149,18 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     // Every Mapbox start is billed above 50,000 a month, so it is counted
     // first (lib/mapBudget.ts). When the budget is used up the hero simply
     // shows no map; the banner at the top of the page explains why.
+    // MapLibre isn't billed: never counted, always started.
     let cancelled = false;
     let destroyMap: (() => void) | undefined;
-    if (!getMapboxToken() || !containerRef.current) return;
-    claimMapLoad().then((allowed) => {
-      if (cancelled || !allowed) return;
-      destroyMap = createMap();
-    });
+    if (!isMapEngineConfigured() || !containerRef.current) return;
+    const allowedPromise = MAP_ENGINE === "mapbox" ? claimMapLoad() : Promise.resolve(true);
+    Promise.all([loadMapEngine(), allowedPromise]).then(
+      ([engine, allowed]) => {
+        if (cancelled || !allowed) return;
+        destroyMap = createMap(engine);
+      },
+      (error) => console.error("Map failed to load:", error)
+    );
     return () => {
       cancelled = true;
       destroyMap?.();
