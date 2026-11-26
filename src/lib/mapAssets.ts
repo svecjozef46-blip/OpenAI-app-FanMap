@@ -2,6 +2,6 @@
 // File names carry a hash of their content, so they can be cached forever
 // (see headers() in next.config.ts).
 export const COUNTRIES_URL = "/data/countries.add6dfaef2.topo.json";
-export const COUNTRY_LABELS_URL = "/data/country-labels.58899f1711.geo.json";
+export const COUNTRY_LABELS_URL = "/data/country-labels.5691d40418.geo.json";
 export const GLYPHS_URL = "/fonts/ffa7eee3bd/{fontstack}/{range}.pbf";
 export const LABEL_FONT = "Barlow Semi Condensed SemiBold";

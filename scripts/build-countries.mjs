@@ -230,13 +230,24 @@ const countries = JSON.parse(shaped["countries.geojson"]);
 // world view, the smallest ones only once zoomed in. Smaller territories that
 // belong to another country (Bermuda, Guernsey…) one zoom level later still.
 // How big: `symbolrank` = Natural Earth's LABELRANK (1 = largest), the same
-// scale Mapbox's country labels use for their text size.
+// scale Mapbox's country labels use for their text size, but at least 4
+// (the middle size) for countries under 500,000 km².
 const isDependency = (p) => p.SOVEREIGNT !== p.ADMIN;
 const LABEL_POINT = {
   IT: [12.4, 42.9], // NE's point is in the Po valley; the boot reads better
   HR: [16.0, 45.6],
   NO: [9.0, 61.5],
+  // NE's points sit at the crowded edge next to their neighbours; at world
+  // view the names then had no room (checked with tools/labels.cjs).
+  CM: [12.8, 6.0],
+  ZM: [27.5, -13.6],
 };
+// Football countries that would otherwise lose their name to bigger but
+// quieter neighbours in crowded regions (West and Central Africa at world
+// view): they win collisions as if they were four times their size. Only
+// the order changes, not the size or when a name appears.
+const FOOTBALL_PRIORITY = new Set(["CM", "GH", "SN", "CI", "NG", "TN", "KR", "UY", "CR"]);
+
 function minzoomForArea(km2) {
   if (km2 >= 100_000) return 0;
   if (km2 >= 50_000) return 2;
@@ -270,9 +281,13 @@ const labels = {
         code,
         name: labelName(code),
         area,
+        // Collision priority (symbol-sort-key): bigger first.
+        priority: area * (FOOTBALL_PRIORITY.has(code) ? 4 : 1),
         // Big territories (Greenland) stay at world view.
         minzoom: minzoomForArea(area) === 0 ? 0 : minzoomForArea(area) + (p && !isDependency(p) ? 0 : 1),
-        symbolrank: p ? p.LABELRANK : 6,
+        // Largest type (ranks 1–3) only for countries over 500,000 km²:
+        // smaller ones at 11 px crowded each other out in Central Africa.
+        symbolrank: Math.max(p ? p.LABELRANK : 6, area < 500_000 ? 4 : 0),
       },
       geometry: { type: "Point", coordinates },
     };

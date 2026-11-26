@@ -80,13 +80,13 @@ export function loadCountryData(): Promise<CountryData> {
 // Country names, mirroring Mapbox dark-v11's `country-label` layer (read
 // from the style our Mapbox map loads): no capitals, no letter spacing,
 // 11 / 9 / 8 px at zoom 1 by `symbolrank` growing to 22 / 19 / 17 px at
-// zoom 9 on the same curve, max width 6 em, line height 1.1, halo 1.25, radial offset 0.6,
-// nothing below zoom 1. Font: see LABEL_FONT in lib/mapAssets.ts.
+// zoom 9 on the same curve, max width 6 em, line height 1.1, halo 1.25, radial offset 0.6.
+// Font: see LABEL_FONT in lib/mapAssets.ts.
 // Our data adds what Mapbox's tiles decide on their side (see
 // scripts/build-countries.mjs): `minzoom` from the country's area (bigger
 // countries are named at world view, the smallest only zoomed in) and, when
-// names collide, the bigger country wins (`area` as symbol-sort-key, larger
-// = placed first).
+// names collide, the bigger country wins (`priority` as symbol-sort-key:
+// the area, raised for a few football countries in crowded regions).
 // Where a name doesn't fit on its point, it may move just next to it (above,
 // below, to a side), as Mapbox's labels do: at world view that names 94
 // countries instead of 67 (measured on a 1440×900 screen, 2026-11-26;
@@ -95,7 +95,10 @@ const labelLayer: maplibregl.LayerSpecification = {
   id: LABEL_LAYER_ID,
   type: "symbol",
   source: LABEL_SOURCE_ID,
-  minzoom: 1,
+  // Mapbox starts at 1; 0.75 so a 1280×720 laptop, whose whole world sits
+  // at zoom ~0.9, still gets names. Phones (zoom below 0) get none, as on
+  // Mapbox.
+  minzoom: 0.75,
   filter: [">=", ["zoom"], ["get", "minzoom"]],
   layout: {
     "text-field": ["get", "name"],
@@ -114,7 +117,7 @@ const labelLayer: maplibregl.LayerSpecification = {
     "text-padding": 0,
     "text-variable-anchor": ["center", "top", "bottom", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right"],
     "text-radial-offset": 0.5,
-    "symbol-sort-key": ["-", 0, ["get", "area"]],
+    "symbol-sort-key": ["-", 0, ["get", "priority"]],
   },
   paint: {
     "text-color": MAP_PALETTE.dark.label,
