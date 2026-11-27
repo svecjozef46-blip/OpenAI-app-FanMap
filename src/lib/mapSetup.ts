@@ -49,6 +49,9 @@ export const WORLD_BOUNDS: [[number, number], [number, number]] = [
 // Outermost points [lng, lat] that must stay in view. West edge: Alaska.
 // East edge: longitude 190 rather than 180, so Russia's eastern tip stays
 // attached to Russia instead of being cut off and shown beside Alaska.
+// (MapLibre, with renderWorldCopies off, shows nothing past 180° and keeps
+// the view to one world, so there the tip does show beside Alaska; see
+// docs/maplibre-comparison/fidelity.md.)
 // North: capped at 75° (Mercator stretches the empty Arctic enormously).
 // South: Tierra del Fuego. Antarctica is left out entirely (also filtered
 // from the layers, see WORLDVIEW_FILTER): it has no fans, and in Mercator it

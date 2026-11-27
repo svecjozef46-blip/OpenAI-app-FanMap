@@ -54,4 +54,6 @@ export const mapboxEngine: MapEngine = {
   },
 
   country: (id) => ({ source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id }),
+  // Borders and fills share one tileset here (only MapLibre splits them).
+  outline: (_map, id) => ({ source: COUNTRY_SOURCE_ID, sourceLayer: COUNTRY_SOURCE_LAYER, id }),
 };

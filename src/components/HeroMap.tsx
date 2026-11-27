@@ -39,15 +39,25 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
   // Latest props, for the map's load handler.
   const latestRef = useRef({ slide, theme });
 
+  // Border color last set per country, so it's set only when it changes
+  // (see `outline` in lib/mapEngine.ts: on MapLibre each border update
+  // makes the map redo that country's border).
+  const linesRef = useRef(new Map<string, string | null>());
+
   function setCountry(c: HeroCountry, color: string | null, progress: number) {
     const engine = engineRef.current;
-    if (!engine) return;
-    mapRef.current?.setFeatureState(engine.country(c.code), {
+    const map = mapRef.current;
+    if (!engine || !map) return;
+    map.setFeatureState(engine.country(c.code), {
       fillColor: color,
-      // Border lights up together with the fill.
-      lineColor: progress > 0.5 ? color : null,
       opacity: (0.42 + c.strength * 0.5) * progress,
     });
+    // Border lights up together with the fill.
+    const line = progress > 0.5 ? color : null;
+    if (linesRef.current.get(c.code) !== line) {
+      linesRef.current.set(c.code, line);
+      map.setFeatureState(engine.outline(map, c.code), { lineColor: line });
+    }
   }
 
   // Fade out whatever is shown, then light up `next`. Driven frame by frame
@@ -121,6 +131,11 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
     });
     engineRef.current = engine;
     mapRef.current = map;
+    // Development only (removed from production builds): lets measurement
+    // scripts inspect the map (docs/maplibre-comparison/tools).
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __fanmapHeroMap?: mapboxgl.Map }).__fanmapHeroMap = map;
+    }
 
     // Keep the whole world in view at any size, leaving room for what
     // HeroShowcase floats over the map: on desktop the headline in the
@@ -151,6 +166,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       map.once("idle", () => {
         applyMapPalette(map, latestRef.current.theme);
         shownRef.current = null;
+        linesRef.current.clear();
         showSlide(latestRef.current.slide);
       });
     });
@@ -163,6 +179,7 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       engineRef.current = null;
       loadedRef.current = false;
       shownRef.current = null;
+      linesRef.current.clear();
     };
   }
 

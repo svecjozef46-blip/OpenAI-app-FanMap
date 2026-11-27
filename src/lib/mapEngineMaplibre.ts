@@ -6,7 +6,9 @@ import { feature } from "topojson-client";
 import type { Topology } from "topojson-specification";
 import { COUNTRIES_URL, COUNTRY_LABELS_URL, GLYPHS_URL, LABEL_FONT } from "@/lib/mapAssets";
 import {
+  BORDER_LAYER_ID,
   COUNTRY_SOURCE_ID,
+  HOVER_LAYER_ID,
   LABEL_LAYER_ID,
   MAP_PALETTE,
   WORLD_BOUNDS,
@@ -29,6 +31,42 @@ import {
 // hover and the light/dark palette work through the same code.
 
 const LABEL_SOURCE_ID = "country-labels";
+// Home-page map only: a second copy of the country shapes for the borders
+// (see `outline` in lib/mapEngine.ts). MapLibre redoes every layer that
+// reads a feature's state whenever any of its state changes; the light-up
+// animation changes a country's fill every frame but its border only once,
+// so with one shared source the borders (the layer with the most vertices)
+// were recomputed every frame for nothing. Measured: with the finer shapes
+// below, the animation's JavaScript per frame on a 4× slowed CPU went from
+// ~8–10 ms back to ~5 ms, as with the old coarse shapes. The match map
+// changes colors only now and then, and there the second copy would only
+// delay the first picture (~0.5 s in our measurements), so it has none.
+const OUTLINE_SOURCE_ID = "country-outlines";
+
+// How much MapLibre may simplify the shapes when it cuts them into tiles
+// (Douglas–Peucker, in pixels of a 512 px tile; MapLibre's default is
+// 0.375). Measured with docs/maplibre-comparison/tools/shape-fidelity.cjs:
+// a drawn coastline must stay within 1 screen pixel of the real one. The
+// default is in CSS pixels, so on a screen with 2 or 3 device pixels per CSS
+// pixel the same simplification is 2–3× more visible; and tiles are shown up
+// to 2× enlarged between zoom levels. 0.125 per device pixel keeps every
+// tested window (390–3840 px wide, DPR 1–3) within 1 px (0.1875 just
+// missed on a 3840 px window at 2×); the default was up to 2 px off, the
+// home page's former 1.5 up to 7 px.
+const SHAPE_TOLERANCE = 0.125;
+// Development only (left out of production builds): measurement scripts
+// can draw the maps with other settings to compare, e.g. the tolerance before
+// a change (docs/maplibre-comparison/tools/shape-fidelity.cjs --exp=…).
+type DevOverrides = { hero?: object; match?: object; map?: object };
+function devOverrides(): DevOverrides | undefined {
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return undefined;
+  return (window as unknown as { __fanmapMapOptions?: DevOverrides }).__fanmapMapOptions;
+}
+
+function shapeTolerance(): number {
+  const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  return SHAPE_TOLERANCE / Math.max(1, ratio);
+}
 
 // Our shapes are good to about zoom 7 (Luxembourg filling a laptop screen);
 // beyond that Natural Earth's coastlines look coarse next to Mapbox's, and
@@ -157,30 +195,31 @@ function buildStyle({
   interactive: boolean;
 }) {
   if (!countryData) throw new Error("loadCountryData() must finish before a map is created");
-  const layers = countryLayers({}, { withHover }) as unknown as maplibregl.LayerSpecification[];
+  const splitOutlines = !interactive;
+  const layers = (countryLayers({}, { withHover }) as unknown as maplibregl.LayerSpecification[]).map((layer) =>
+    splitOutlines && (layer.id === BORDER_LAYER_ID || layer.id === HOVER_LAYER_ID)
+      ? { ...layer, source: OUTLINE_SOURCE_ID }
+      : layer
+  );
+  const shapes = {
+    type: "geojson",
+    data: countryData.countriesUrl,
+    // ISO alpha-2 code as feature id, like `iso_3166_1` on Mapbox — the
+    // format votes.country_code uses.
+    promoteId: "code",
+    tolerance: shapeTolerance(),
+    // Home-page map (fixed world view): no tiles past zoom 3, as it never
+    // zooms in.
+    ...(interactive ? {} : { maxzoom: 3 }),
+    ...devOverrides()?.[interactive ? "match" : "hero"],
+  } satisfies maplibregl.GeoJSONSourceSpecification;
   const style: maplibregl.StyleSpecification = {
     version: 8,
     // Flat world, same as Mapbox (PROJECTION in lib/mapSetup.ts).
     projection: { type: "mercator" },
     sources: {
-      [COUNTRY_SOURCE_ID]: {
-        type: "geojson",
-        data: countryData.countriesUrl,
-        // ISO alpha-2 code as feature id, like `iso_3166_1` on Mapbox — the
-        // format votes.country_code uses.
-        promoteId: "code",
-        attribution: ATTRIBUTION,
-        // Interactive map: MapLibre's default simplification per zoom level
-        // (it only drops detail smaller than a pixel); turning it down made
-        // the world view draw ~20% slower for no visible gain.
-        // Home-page map (fixed world view, colors animated every frame): no
-        // tiles past zoom 3, so recoloring ~100 countries per frame stays
-        // smooth on slower phones. It used to also use a 4x coarser
-        // tolerance (1.5), but on a wide desktop screen that showed as
-        // jagged, faceted coastlines (Canada's islands, Australia,
-        // Indonesia), so since 2026-11-27 it keeps the default.
-        ...(interactive ? { tolerance: 0.375 } : { maxzoom: 3 }),
-      },
+      [COUNTRY_SOURCE_ID]: { ...shapes, attribution: ATTRIBUTION },
+      ...(splitOutlines ? { [OUTLINE_SOURCE_ID]: shapes } : {}),
     },
     // No background layer: transparent oceans, the page shows through.
     layers,
@@ -219,6 +258,13 @@ export const maplibreEngine: MapEngine = {
         ? { dragRotate: false, pitchWithRotate: false, cooperativeGestures: Boolean(cooperativeGestures) }
         : { interactive: false }),
       attributionControl: attribution === "default" ? {} : false,
+      // MapLibre draws at most 4096 × 4096 device pixels by default and
+      // stretches the picture beyond that, which blurs the map on a 5K
+      // display (2560 × 1440 at 2×: 5120 px wide). Mapbox has no such limit.
+      // MapLibre still lowers it on its own if the graphics card can't go
+      // this far.
+      maxCanvasSize: [8192, 8192],
+      ...devOverrides()?.map,
     });
     if (attribution === "compact") {
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
@@ -243,4 +289,5 @@ export const maplibreEngine: MapEngine = {
 
   // GeoJSON sources have no source layers.
   country: (id) => ({ source: COUNTRY_SOURCE_ID, id }),
+  outline: (map, id) => ({ source: map.getSource(OUTLINE_SOURCE_ID) ? OUTLINE_SOURCE_ID : COUNTRY_SOURCE_ID, id }),
 };
