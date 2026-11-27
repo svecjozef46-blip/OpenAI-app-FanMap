@@ -30,6 +30,7 @@ Appka beží na `http://localhost:3000`.
 - `NEXT_PUBLIC_MAP_ENGINE` — voliteľné. Prázdne alebo `maplibre` = mapa cez MapLibre (predvolené od 2026-11-26): bez tokenu a bez mesačného limitu spustení, dáta a písmo sú v `public/`. `mapbox` = pôvodná mapa cez Mapbox (záloha; potrebuje token a počíta spustenia). Číta sa pri builde, po zmene treba nasadiť znova. Podrobnosti v `docs/maplibre.md`.
 - `FANMAP_VOTE_SECRET` — **povinné pre hlasovanie.** Dlhý náhodný reťazec, ktorým server dokazuje databáze, že hlas ide z našej appky. Pozri „Hlasovanie a bezpečnosť“ nižšie.
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` a `TURNSTILE_SECRET_KEY` — kľúče Cloudflare Turnstile (overenie, že hlasuje človek). **Na produkcii povinné.** Lokálne môžu ostať prázdne, overenie je potom vypnuté. Pozri „Hlasovanie a bezpečnosť“ nižšie.
+- `NEXT_PUBLIC_OPERATOR_NAME`, `NEXT_PUBLIC_OPERATOR_ADDRESS`, `NEXT_PUBLIC_CONTACT_EMAIL` — kto stránku prevádzkuje a kontakt, zobrazené na stránke o ochrane súkromia (`/privacy`, `/privacy/sk`). Verejné; nastav všetky tri alebo žiadnu (nový riadok v adrese = `\n`). Kým chýbajú, stránka píše, že kontakt zverejníme pred spustením, a produkčný build na Verceli vypíše výrazné varovanie (`scripts/check-privacy-config.mjs`). **Pred spustením ich treba doplniť**; nikdy nevymýšľaj údaje. Pozri `docs/privacy.md`.
 - `FANMAP_DEV_COUNTRY` — voliteľné, len pre lokálny vývoj. V produkcii (na Vercel) appka pozná krajinu hlasujúceho automaticky (hlavička `x-vercel-ip-country`), lokálne táto hlavička neexistuje, takže bez tejto premennej by `npm run dev` hlasovanie odmietal s `country_unknown`. Nastav na 2-písmenový kód krajiny, napr. `SK`.
 
 ## Databáza
@@ -70,6 +71,14 @@ Hlas zapisuje databázová funkcia `submit_vote()`. Dá sa zavolať verejným k�
      set secret_hash = encode(sha256(convert_to('NOVY_KLUC', 'UTF8')), 'hex')
      where name = 'vote';
      ```
+
+### Ochrana súkromia a uchovávanie údajov
+
+Stránka `/privacy` (anglicky) a `/privacy/sk` (slovensky), odkaz v pätičke. Prehľad pre majiteľa (údaj – účel – základ – doba – kto ho vidí, otvorené otázky) je v `docs/privacy.md`. Uchovávanie zabezpečujú naplánované úlohy pg_cron z `docs/migrations/2026-11-26-privacy-retention.sql` (**zatiaľ neaplikované, aplikuje majiteľ**):
+
+- `anonymize-old-votes` (denne 03:17 UTC) — 35 dní po hlase, keď je zápas uzavretý, nahradí `voter_hash` náhodnou hodnotou; výsledky sa nemenia.
+- `purge-vote-attempts` (každých 15 minút) — maže odtlačky IP staršie ako hodinu aj vtedy, keď nikto nehlasuje.
+- `purge-old-feedback` (denne 03:23 UTC) — maže spätnú väzbu staršiu ako 180 dní.
 
 ### Ochrana pred hromadným hlasovaním
 

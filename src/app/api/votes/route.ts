@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { verifyTurnstileToken, type TurnstileResult } from "@/lib/turnstileServer";
-import { computeIpHash, getClientIp } from "@/lib/clientIp";
+import { computeIpHash, getClientIp, logDbError } from "@/lib/clientIp";
 import { getMapBudgetStatus } from "@/lib/mapBudgetServer";
 import { pausedMessage } from "@/lib/mapBudgetMessage";
 
@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (rateError) {
-      console.error("register_vote_attempt failed:", rateError);
+      logDbError("register_vote_attempt failed", rateError);
       return NextResponse.json(UNAVAILABLE, { status: 503 });
     }
     if (allowed === false) {
@@ -227,12 +227,15 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    console.error("submit_vote failed:", error);
+    logDbError("submit_vote failed", error);
     return NextResponse.json(
       { error: "vote_failed", message: "We couldn't count your vote. Please try again." },
       { status: 400 }
     );
   }
 
-  return NextResponse.json({ vote: data }, { status: 201 });
+  // Only what the vote is about: never the voter identifier (voter_hash),
+  // which the database row also contains.
+  const { id, match_id, team_id, country_code, created_at } = data as Record<string, unknown>;
+  return NextResponse.json({ vote: { id, match_id, team_id, country_code, created_at } }, { status: 201 });
 }
