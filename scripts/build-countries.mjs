@@ -3,9 +3,14 @@
 // MapLibre version of the map (NEXT_PUBLIC_MAP_ENGINE=maplibre). The output
 // is committed, so the app never downloads map data from anyone at run time:
 //
-//   public/data/countries.geojson        one feature per country, id = ISO alpha-2
-//   public/data/country-labels.geojson   one point per country, for the name labels
-//   public/fonts/Open Sans Semibold/     glyph ranges (.pbf) the labels need
+//   public/data/countries.<hash>.topo.json      one shape per country, id = ISO alpha-2 (TopoJSON)
+//   public/data/country-labels.<hash>.geo.json  one point per country, for the name labels (GeoJSON)
+//   public/fonts/<hash>/<font>/<range>.pbf      glyphs the labels need (scripts/build-glyphs.mjs)
+//   src/lib/mapAssets.ts                        the current file names, for the app
+//
+// <hash> is a hash of the content, so a changed file gets a new name and the
+// files can be cached by browsers for a year (headers() in next.config.ts).
+// Files of an earlier build are deleted.
 //
 // Run again only to update the data:   node scripts/build-countries.mjs
 // (downloads ~13 MB once into scripts/.cache, which git ignores).
@@ -17,26 +22,30 @@
 //   the US one. 10m is simplified here to roughly 50m detail, but unlike the
 //   ready-made 50m file it still has every small state (Malta, Singapore,
 //   Monaco, San Marino, Vatican, Liechtenstein, Andorra…).
-// - Open Sans Semibold glyphs from openmaptiles/fonts (Apache License 2.0).
+// - The label font, built from Google Fonts' TTF by scripts/build-glyphs.mjs
+//   (see FONT below and docs/maplibre.md).
 
-import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mapshaper from "mapshaper";
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from "node:zlib";
+import { buildGlyphs } from "./build-glyphs.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CACHE = path.join(ROOT, "scripts/.cache");
 const OUT_DATA = path.join(ROOT, "public/data");
-const FONT = "Open Sans Semibold";
-const OUT_FONT = path.join(ROOT, "public/fonts", FONT);
+const OUT_FONTS = path.join(ROOT, "public/fonts");
+const ASSETS_TS = path.join(ROOT, "src/lib/mapAssets.ts");
+// Label font: chosen by comparing screenshots against Mapbox's DIN Pro
+// (docs/maplibre.md). LABEL_FONT=... overrides it for such comparisons.
+const FONT = process.env.LABEL_FONT ?? "Barlow Semi Condensed SemiBold";
 
 const NE_VERSION = "v5.1.2";
 const NE_FILE = "ne_10m_admin_0_countries_usa.geojson";
 const NE_URL = `https://raw.githubusercontent.com/nvkelso/natural-earth-vector/${NE_VERSION}/geojson/${NE_FILE}`;
-// Commit of openmaptiles/fonts' gh-pages branch the glyphs were taken from
-// (pinned, so a rebuild gives the same files).
-const FONTS_URL = "https://raw.githubusercontent.com/openmaptiles/fonts/025ff2b2f84cc0fdf11f7b1d74b3a784595fe7a4";
 
 // How much of the 10m detail to keep. A fixed share for every country (tried
 // 4%, 15% and 25%, compared on screen against Mapbox on 2026-11-26) either
@@ -44,12 +53,18 @@ const FONTS_URL = "https://raw.githubusercontent.com/openmaptiles/fonts/025ff2b2
 // drops Gozo, because it takes most from the smallest shapes. Instead each
 // country gets its own tolerance, proportional to its size: ~80 m for
 // microstates, ~200 m for Luxembourg, ~900 m for Slovakia, up to 4 km for
-// Russia or Canada. Result: 1.8 MB (~0.6 MB gzipped). keep-shapes keeps every
-// small island.
+// Russia or Canada. keep-shapes keeps every small island.
 const SIMPLIFY = "variable interval='Math.min(4000, Math.max(80, Math.sqrt(this.area) / 250))'";
-// Coordinates rounded to 0.001° (~100 m): invisible at the zoom levels the
-// map allows, and a third of the file size.
+// Coordinates rounded to 0.001° (~100 m) while processing: invisible at the
+// zoom levels the map allows (up to 7).
 const PRECISION = 0.001;
+// The file itself is TopoJSON: each border is stored once (not once per
+// neighbour) and coordinates as small whole-number steps on a grid of
+// 500,000 × 500,000 over the world (~0.0007°, ~70 m, finer than the
+// rounding above). The same shapes as GeoJSON were 1.8 MB, ~550 KB with the
+// brotli level a CDN uses on the fly; as TopoJSON they are ~300 KB.
+// The browser turns it back into GeoJSON (topojson-client, lib/mapEngineMaplibre.ts).
+const QUANTIZATION = 500_000;
 
 // --- Country codes ----------------------------------------------------------
 // votes.country_code is the ISO 3166-1 alpha-2 code from Vercel's
@@ -205,14 +220,42 @@ const shaped = await mapshaper.applyCommands(
 const countries = JSON.parse(shaped["countries.geojson"]);
 
 // --- 3. Label points --------------------------------------------------------
-// Natural Earth's hand-placed LABEL_X/LABEL_Y where it has them; otherwise
-// (split-off parts) a point inside the shape. `rank` = Natural Earth's
-// MIN_LABEL, the zoom from which the name fits (big countries first, as on
-// the Mapbox map), two levels later for territories that belong to another
-// country (Bermuda, Guernsey, Pitcairn…) and one later for microstates under
-// 1,000 km² (Monaco, Vatican, Malta…), which Mapbox doesn't label at world or
-// Europe zoom either.
+// Where: Natural Earth's hand-placed LABEL_X/LABEL_Y where it has them (not
+// the centre of the shape: Italy, Norway or Chile have theirs where the
+// name reads best), otherwise (split-off parts) a point inside the shape,
+// with a few corrections in LABEL_POINT.
+// Which first: the bigger the country, the higher its priority when names
+// collide (`area`, used as symbol-sort-key), and the earlier it appears
+// (`minzoom`, from its area): every country over 100,000 km² is named at
+// world view, the smallest ones only once zoomed in. Smaller territories that
+// belong to another country (Bermuda, Guernsey…) one zoom level later still.
+// How big: `symbolrank` = Natural Earth's LABELRANK (1 = largest), the same
+// scale Mapbox's country labels use for their text size, but at least 4
+// (the middle size) for countries under 500,000 km².
 const isDependency = (p) => p.SOVEREIGNT !== p.ADMIN;
+const LABEL_POINT = {
+  IT: [12.4, 42.9], // NE's point is in the Po valley; the boot reads better
+  HR: [16.0, 45.6],
+  NO: [9.0, 61.5],
+  // NE's points sit at the crowded edge next to their neighbours; at world
+  // view the names then had no room (checked with tools/labels.cjs).
+  CM: [12.8, 6.0],
+  ZM: [27.5, -13.6],
+};
+// Football countries that would otherwise lose their name to bigger but
+// quieter neighbours in crowded regions (West and Central Africa at world
+// view): they win collisions as if they were four times their size. Only
+// the order changes, not the size or when a name appears.
+const FOOTBALL_PRIORITY = new Set(["CM", "GH", "SN", "CI", "NG", "TN", "KR", "UY", "CR"]);
+
+function minzoomForArea(km2) {
+  if (km2 >= 100_000) return 0;
+  if (km2 >= 50_000) return 2;
+  if (km2 >= 20_000) return 2.5;
+  if (km2 >= 10_000) return 3;
+  if (km2 >= 2_000) return 4;
+  return 5;
+}
 
 const innerPoints = JSON.parse(
   (
@@ -229,45 +272,88 @@ const labels = {
   features: countries.features.map((f) => {
     const code = f.properties.code;
     const p = labelSource.get(code);
-    const coordinates = p ? [p.LABEL_X, p.LABEL_Y].map((n) => Math.round(n * 1000) / 1000) : innerPoint.get(code);
+    const area = Math.round(areaKm2.get(code));
+    const coordinates =
+      LABEL_POINT[code] ?? (p ? [p.LABEL_X, p.LABEL_Y].map((n) => Math.round(n * 1000) / 1000) : innerPoint.get(code));
     return {
       type: "Feature",
       properties: {
         code,
         name: labelName(code),
-        rank: (p ? p.MIN_LABEL + (isDependency(p) ? 2 : 0) : 7) + (areaKm2.get(code) < 1000 ? 1 : 0),
-        size: p ? p.LABELRANK : 6,
+        area,
+        // Collision priority (symbol-sort-key): bigger first.
+        priority: area * (FOOTBALL_PRIORITY.has(code) ? 4 : 1),
+        // Big territories (Greenland) stay at world view.
+        minzoom: minzoomForArea(area) === 0 ? 0 : minzoomForArea(area) + (p && !isDependency(p) ? 0 : 1),
+        // Largest type (ranks 1–3) only for countries over 500,000 km²:
+        // smaller ones at 11 px crowded each other out in Central Africa.
+        symbolrank: Math.max(p ? p.LABELRANK : 6, area < 500_000 ? 4 : 0),
       },
       geometry: { type: "Point", coordinates },
     };
   }),
 };
 
-// --- 4. Write --------------------------------------------------------------
+// --- 4. Write (content-hashed names) ----------------------------------------
 
+const hashOf = (data) => createHash("sha256").update(data).digest("hex").slice(0, 10);
+
+const countriesJson = (
+  await mapshaper.applyCommands(
+    `-i c.json -rename-layers countries -o t.json format=topojson quantization=${QUANTIZATION} id-field=code`,
+    { "c.json": JSON.stringify(countries) }
+  )
+)["t.json"].toString();
+const labelsJson = JSON.stringify(labels);
+// ".json" endings: served as application/json, which the CDN compresses
+// (an unknown ending like .topojson is sent as application/octet-stream,
+// uncompressed: 900 KB instead of ~300 KB).
+const countriesFile = `countries.${hashOf(countriesJson)}.topo.json`;
+const labelsFile = `country-labels.${hashOf(labelsJson)}.geo.json`;
+
+await rm(OUT_DATA, { recursive: true, force: true });
 await mkdir(OUT_DATA, { recursive: true });
-const countriesJson = JSON.stringify(countries);
-await writeFile(path.join(OUT_DATA, "countries.geojson"), countriesJson + "\n");
-await writeFile(path.join(OUT_DATA, "country-labels.geojson"), JSON.stringify(labels) + "\n");
+await writeFile(path.join(OUT_DATA, countriesFile), countriesJson);
+await writeFile(path.join(OUT_DATA, labelsFile), labelsJson);
 
 // --- 5. Glyphs: only the ranges the label names use -------------------------
 
-const ranges = new Set();
+const rangeStarts = new Set();
 for (const f of labels.features) {
-  for (const ch of f.properties.name) {
-    const start = Math.floor(ch.codePointAt(0) / 256) * 256;
-    ranges.add(`${start}-${start + 255}`);
-  }
+  for (const ch of f.properties.name) rangeStarts.add(Math.floor(ch.codePointAt(0) / 256) * 256);
 }
-await mkdir(OUT_FONT, { recursive: true });
-for (const range of ranges) {
-  const file = path.join(OUT_FONT, `${range}.pbf`);
-  await download(`${FONTS_URL}/${encodeURIComponent(FONT)}/${range}.pbf`, file);
-}
-
-const kb = async (file) => `${Math.round((await stat(file)).size / 1024)} KB`;
-console.log(
-  `countries.geojson: ${countries.features.length} countries, ${await kb(path.join(OUT_DATA, "countries.geojson"))}`
+const staging = path.join(CACHE, "glyphs-staging");
+await rm(staging, { recursive: true, force: true });
+const glyphFiles = await buildGlyphs(FONT, [...rangeStarts].sort((a, b) => a - b), staging);
+const glyphHash = hashOf(
+  Buffer.concat([Buffer.from(FONT), ...(await Promise.all(glyphFiles.map((f) => readFile(f))))])
 );
-console.log(`country-labels.geojson: ${await kb(path.join(OUT_DATA, "country-labels.geojson"))}`);
-console.log(`glyph ranges: ${[...ranges].join(", ")}`);
+await rm(OUT_FONTS, { recursive: true, force: true });
+await mkdir(OUT_FONTS, { recursive: true });
+await cp(staging, path.join(OUT_FONTS, glyphHash), { recursive: true });
+
+// --- 6. Tell the app the new names -------------------------------------------
+
+await writeFile(
+  ASSETS_TS,
+  `// Generated by scripts/build-countries.mjs — do not edit by hand.
+// File names carry a hash of their content, so they can be cached forever
+// (see headers() in next.config.ts).
+export const COUNTRIES_URL = "/data/${countriesFile}";
+export const COUNTRY_LABELS_URL = "/data/${labelsFile}";
+export const GLYPHS_URL = "/fonts/${glyphHash}/{fontstack}/{range}.pbf";
+export const LABEL_FONT = ${JSON.stringify(FONT)};
+`
+);
+
+// --- 7. Sizes ----------------------------------------------------------------
+
+const sizes = (data) => {
+  const kb = (n) => `${Math.round(n / 1024)} KB`;
+  const br = (q) => brotliCompressSync(Buffer.from(data), { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: q } }).length;
+  return `${kb(Buffer.byteLength(data))} (gzip ${kb(gzipSync(data, { level: 6 }).length)}, brotli level 5 ${kb(br(5))}, level 11 ${kb(br(11))})`;
+};
+console.log(`${countriesFile}: ${countries.features.length} countries, ${sizes(countriesJson)}`);
+console.log(`${labelsFile}: ${sizes(labelsJson)}`);
+console.log(`glyphs: /fonts/${glyphHash}/${FONT}/ ranges ${[...rangeStarts].map((s) => `${s}-${s + 255}`).join(", ")}`);
+console.log(`(previous files removed; ${path.relative(ROOT, ASSETS_TS)} updated)`);

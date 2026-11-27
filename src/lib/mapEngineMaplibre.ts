@@ -2,6 +2,9 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type mapboxgl from "mapbox-gl";
 import type { MapEngine } from "@/lib/mapEngine";
+import { feature } from "topojson-client";
+import type { Topology } from "topojson-specification";
+import { COUNTRIES_URL, COUNTRY_LABELS_URL, GLYPHS_URL, LABEL_FONT } from "@/lib/mapAssets";
 import {
   COUNTRY_SOURCE_ID,
   LABEL_LAYER_ID,
@@ -16,67 +19,144 @@ import {
 // it.
 //
 // No base style and no outside server: the style is built here from files
-// in public/, made by scripts/build-countries.mjs (see docs/maplibre.md):
-//   /data/countries.geojson        Natural Earth country shapes, id = ISO alpha-2
-//   /data/country-labels.geojson   one label point per country
-//   /fonts/Open Sans Semibold/     label glyphs
+// in public/, made by scripts/build-countries.mjs (see docs/maplibre.md),
+// whose current names are in lib/mapAssets.ts:
+//   /data/countries.<hash>.topo.json      Natural Earth country shapes, id = ISO alpha-2
+//   /data/country-labels.<hash>.geo.json  one label point per country
+//   /fonts/<hash>/<font>/<range>.pbf      label glyphs
 // The layers are the same as on the Mapbox map (countryLayers() in
 // lib/mapSetup.ts), with the same ids and feature-state keys, so colors,
 // hover and the light/dark palette work through the same code.
 
 const LABEL_SOURCE_ID = "country-labels";
-const LABEL_FONT = "Open Sans Semibold";
 
-const ATTRIBUTION = '<a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a>';
+// Our shapes are good to about zoom 7 (Luxembourg filling a laptop screen);
+// beyond that Natural Earth's coastlines look coarse next to Mapbox's, and
+// nobody needs street-level zoom on a fan map. See docs/maplibre.md.
+export const MAPLIBRE_MAX_ZOOM = 7;
 
-// MapLibre fetches these from a web worker, which can't resolve paths
-// relative to the page, hence absolute URLs. (Plain concatenation, not
-// new URL(): that would escape the {fontstack}/{range} placeholders.)
+const ATTRIBUTION =
+  '<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a> | ' +
+  '<a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a>';
+
+// MapLibre fetches glyphs itself, from absolute URLs. (Plain
+// concatenation, not new URL(): that would escape the {fontstack}/{range}
+// placeholders.)
 const asset = (path: string) => window.location.origin + path;
 
-// Country names, styled after Mapbox dark-v11's country labels: medium
-// weight, small at world view and growing with zoom. `rank` (Natural
-// Earth's MIN_LABEL, ~1.7 for Russia, ~5 for Luxembourg) is roughly the
-// zoom from which a name fits; names wait until a few zoom levels before
-// that (dependencies later still, see
-// scripts/build-countries.mjs), and bigger countries win when two collide (symbol-sort-key), as on
-// Mapbox. `size` (Natural Earth's LABELRANK, 2 = largest) sets the type size.
+// Country shapes and label points, fetched once per page load and shared by
+// every map on it (the home-page map, then the match map after navigating
+// there). The files are cached by the browser for a year (their names
+// change with their content), and the page asks for them early with
+// <link rel="preload"> (preloadMapData in lib/mapEngine.ts), which this
+// plain fetch() picks up. The shapes arrive as compact TopoJSON and are
+// turned into the GeoJSON MapLibre draws.
+//
+// MapLibre cuts the shapes into tiles in a web worker. Handing it the
+// GeoJSON as an object means copying ~110,000 points to the worker on the
+// main thread (~100 ms, several times that on a phone). Instead the GeoJSON
+// becomes text in a blob: URL, which the worker fetches and parses itself.
+type CountryData = { countriesUrl: string; labels: GeoJSON.FeatureCollection };
+let countryData: CountryData | null = null;
+let loadingData: Promise<CountryData> | null = null;
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+// TopoJSON decodes to long fractions (12.345678901…); 4 decimals (~10 m)
+// is far below what the map shows and halves the text handed to the worker.
+function roundCoordinates(collection: GeoJSON.FeatureCollection) {
+  const round = (ring: number[][]) => {
+    for (const point of ring) {
+      point[0] = Math.round(point[0] * 1e4) / 1e4;
+      point[1] = Math.round(point[1] * 1e4) / 1e4;
+    }
+  };
+  for (const f of collection.features) {
+    const g = f.geometry;
+    if (g.type === "Polygon") g.coordinates.forEach(round);
+    else if (g.type === "MultiPolygon") g.coordinates.forEach((polygon) => polygon.forEach(round));
+  }
+}
+
+export function loadCountryData(): Promise<CountryData> {
+  loadingData ??= Promise.all([fetchJson<Topology>(COUNTRIES_URL), fetchJson<GeoJSON.FeatureCollection>(COUNTRY_LABELS_URL)])
+    .then(([topology, labels]) => {
+      const countries = feature(topology, topology.objects.countries) as GeoJSON.FeatureCollection;
+      roundCoordinates(countries);
+      const blob = new Blob([JSON.stringify(countries)], { type: "application/json" });
+      countryData = { countriesUrl: URL.createObjectURL(blob), labels };
+      return countryData;
+    })
+    .catch((error) => {
+      loadingData = null; // let a later map try again
+      throw error;
+    });
+  return loadingData;
+}
+
+// Country names, mirroring Mapbox dark-v11's `country-label` layer (read
+// from the style our Mapbox map loads): no capitals, no letter spacing,
+// 11 / 9 / 8 px at zoom 1 by `symbolrank` growing to 22 / 19 / 17 px at
+// zoom 9 on the same curve, max width 6 em, line height 1.1, halo 1.25, radial offset 0.6.
+// Font: see LABEL_FONT in lib/mapAssets.ts.
+// Our data adds what Mapbox's tiles decide on their side (see
+// scripts/build-countries.mjs): `minzoom` from the country's area (bigger
+// countries are named at world view, the smallest only zoomed in) and, when
+// names collide, the bigger country wins (`priority` as symbol-sort-key:
+// the area, raised for a few football countries in crowded regions).
+// Where a name doesn't fit on its point, it may move just next to it (above,
+// below, to a side), as Mapbox's labels do: at world view that names 94
+// countries instead of 67 (measured on a 1440×900 screen, 2026-11-26;
+// docs/maplibre-comparison/tools/labels.cjs).
 const labelLayer: maplibregl.LayerSpecification = {
   id: LABEL_LAYER_ID,
   type: "symbol",
   source: LABEL_SOURCE_ID,
-  // Like Mapbox: no names below zoom 1 (the whole world on a phone).
-  minzoom: 1,
-  // Up to 3 levels early at world view, 2 when zoomed in (as on Mapbox).
-  filter: ["<=", ["get", "rank"], ["+", ["zoom"], ["step", ["zoom"], 3, 2.5, 2]]],
+  // Mapbox starts at 1; 0.75 so a 1280×720 laptop, whose whole world sits
+  // at zoom ~0.9, still gets names. Phones (zoom below 0) get none, as on
+  // Mapbox.
+  minzoom: 0.75,
+  filter: [">=", ["zoom"], ["get", "minzoom"]],
   layout: {
     "text-field": ["get", "name"],
     "text-font": [LABEL_FONT],
     "text-size": [
       "interpolate",
-      ["linear"],
+      ["cubic-bezier", 0.2, 0, 0.7, 1],
       ["zoom"],
       1,
-      ["step", ["get", "size"], 10.5, 4, 10, 5, 9.5],
-      4,
-      ["step", ["get", "size"], 15, 4, 13, 5, 12],
-      8,
-      ["step", ["get", "size"], 21, 4, 18, 5, 16],
+      ["step", ["get", "symbolrank"], 11, 4, 9, 5, 8],
+      9,
+      ["step", ["get", "symbolrank"], 22, 4, 19, 5, 17],
     ],
     "text-max-width": 6,
     "text-line-height": 1.1,
-    "text-padding": 2,
-    "symbol-sort-key": ["get", "rank"],
+    "text-padding": 0,
+    "text-variable-anchor": ["center", "top", "bottom", "left", "right", "top-left", "top-right", "bottom-left", "bottom-right"],
+    "text-radial-offset": 0.5,
+    "symbol-sort-key": ["-", 0, ["get", "priority"]],
   },
   paint: {
     "text-color": MAP_PALETTE.dark.label,
     "text-halo-color": MAP_PALETTE.dark.labelHalo,
-    "text-halo-width": 1,
-    "text-halo-blur": 0.5,
+    "text-halo-width": 1.25,
   },
 };
 
-function buildStyle({ withHover, countryLabels }: { withHover: boolean; countryLabels: boolean }) {
+function buildStyle({
+  withHover,
+  countryLabels,
+  interactive,
+}: {
+  withHover: boolean;
+  countryLabels: boolean;
+  interactive: boolean;
+}) {
+  if (!countryData) throw new Error("loadCountryData() must finish before a map is created");
   const layers = countryLayers({}, { withHover }) as unknown as maplibregl.LayerSpecification[];
   const style: maplibregl.StyleSpecification = {
     version: 8,
@@ -85,21 +165,35 @@ function buildStyle({ withHover, countryLabels }: { withHover: boolean; countryL
     sources: {
       [COUNTRY_SOURCE_ID]: {
         type: "geojson",
-        data: asset("/data/countries.geojson"),
+        data: countryData.countriesUrl,
         // ISO alpha-2 code as feature id, like `iso_3166_1` on Mapbox — the
         // format votes.country_code uses.
         promoteId: "code",
         attribution: ATTRIBUTION,
-        // Shapes are already simplified at build time; keep them as they are.
-        tolerance: 0.2,
+        // Interactive map: MapLibre's default simplification per zoom level
+        // (it only drops detail smaller than a pixel); turning it down made
+        // the world view draw ~20% slower for no visible gain.
+        // Home-page map (fixed world view, colors animated every frame):
+        // coarser shapes and no tiles past zoom 3, so recoloring ~100
+        // countries per frame stays smooth on slower phones.
+        // Measured 2026-11-26, docs/maplibre.md.
+        ...(interactive ? { tolerance: 0.375 } : { tolerance: 1.5, maxzoom: 3 }),
       },
     },
     // No background layer: transparent oceans, the page shows through.
     layers,
   };
   if (countryLabels) {
-    style.glyphs = asset("/fonts/{fontstack}/{range}.pbf");
-    style.sources[LABEL_SOURCE_ID] = { type: "geojson", data: asset("/data/country-labels.geojson") };
+    style.glyphs = asset(GLYPHS_URL);
+    style.sources[LABEL_SOURCE_ID] = {
+      type: "geojson",
+      data: countryData.labels,
+      // No tile buffer: with one, a label point near a tile edge (the
+      // equator and the Greenwich meridian at world zoom) is copied into
+      // both tiles, and with symbol-sort-key one copy knocks out the other,
+      // so names like Tanzania, Ecuador or the United Kingdom disappeared.
+      buffer: 0,
+    };
     style.layers.push(labelLayer);
   }
   return style;
@@ -113,9 +207,10 @@ export const maplibreEngine: MapEngine = {
   createMap({ container, interactive, attribution, cooperativeGestures, withHover, countryLabels }) {
     const map = new maplibregl.Map({
       container,
-      style: buildStyle({ withHover, countryLabels }),
+      style: buildStyle({ withHover, countryLabels, interactive }),
       renderWorldCopies: false,
       bounds: WORLD_BOUNDS,
+      maxZoom: MAPLIBRE_MAX_ZOOM,
       // Resizing is handled by each component's ResizeObserver.
       trackResize: false,
       ...(interactive

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { MAP_ENGINE } from "@/lib/mapEngine";
 
 // Monthly map budget, browser side (server side: lib/mapBudgetServer.ts).
 // One shared state for the whole page: the banner, the maps and the vote
@@ -26,6 +27,11 @@ function parse(body: unknown): MapBudget | null {
 }
 
 async function loadStatus() {
+  // The budget is about Mapbox map starts. MapLibre (the default engine,
+  // lib/mapEngine.ts) isn't billed and never counts a start, so there is
+  // nothing to ask: no request, no banner. Only a "paused" answer from the
+  // vote API itself (markPaused) can still show it.
+  if (MAP_ENGINE !== "mapbox") return;
   try {
     const response = await fetch("/api/map-load");
     if (!response.ok) return;
