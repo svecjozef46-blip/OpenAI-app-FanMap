@@ -1,7 +1,14 @@
-// node shots.cjs <engineLabel> <baseUrl> <outDir> [demo]
+// node shots.cjs <engineLabel> <baseUrl (with ?_vercel_share=… if protected)> <outDir> [demo]
+// Screenshots of the match page for each view below, desktop and phone, dark
+// and light. "demo" replaces the results with the DEMO list (in the browser
+// only). VIEWS=europe,malta and KEYS=desktop-dark limit what is taken.
+// Zooming = double-clicks on the same spot, so both engines get the same
+// views.
 const { chromium } = require("playwright");
 const fs = require("fs");
-const [, , label, base, outDir, mode] = process.argv;
+const [, , label, start, outDir, mode] = process.argv;
+const base = new URL(start).origin;
+const share = new URL(start).searchParams.get("_vercel_share");
 const MATCH = "bffd1947-5f1a-4825-89db-ea47f82443ae";
 const HOME = "451b3aef-ea3b-4f18-b596-5490a254ef03";
 const AWAY = "68ac1ae1-97e2-480d-b325-092b91dc1e1c";
@@ -48,8 +55,10 @@ function projector(box, padding) {
 const VIEWS = [
   { name: "world", clicks: 0 },
   { name: "europe", at: [12, 50], clicks: 2 },
+  { name: "asia", at: [95, 30], clicks: 1 },
+  { name: "south-america", at: [-60, -20], clicks: 1 },
   { name: "slovakia", at: [19.5, 48.7], clicks: 4 },
-  { name: "luxembourg", at: [6.1, 49.7], clicks: 6 },
+  { name: "luxembourg", at: [6.1, 49.7], clicks: 5 },
   { name: "malta", at: [14.4, 35.95], clicks: 5 },
   { name: "kosovo", at: [20.9, 42.6], clicks: 5 },
   { name: "singapore", at: [103.82, 1.36], clicks: 5 },
@@ -95,6 +104,7 @@ const onlyKeys = process.env.KEYS ? process.env.KEYS.split(",") : null;
           })
         );
       }
+      if (share) await page.goto(`${base}/?_vercel_share=${share}`, { waitUntil: "domcontentloaded" });
       const t0 = Date.now();
       await page.goto(`${base}/match/${MATCH}`, { waitUntil: "domcontentloaded" });
       const canvas = page.locator("canvas").first();

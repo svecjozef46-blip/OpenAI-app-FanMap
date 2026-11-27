@@ -7,7 +7,7 @@ import { countryName, splitPercent } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
 import { FILL_LAYER_ID, MAP_PALETTE, applyMapPalette, fitWorld } from "@/lib/mapSetup";
-import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, type MapEngine } from "@/lib/mapEngine";
+import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, preloadMapData, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad, useMapBudget } from "@/lib/mapBudget";
 import { formatResetDate } from "@/lib/mapBudgetMessage";
 
@@ -24,6 +24,21 @@ function opacityForShare(leaderShare: number): number {
   return 0.4 + Math.min(Math.max(leaderShare - 0.5, 0), 0.5) * 0.9;
 }
 
+// Color changes (a new vote, a match switch, light/dark mode) fade over this
+// long instead of jumping. Neither map library animates feature-state on
+// its own, so applyResults() drives it frame by frame, like HeroMap does.
+const COLOR_FADE_MS = 450;
+
+type Rgb = [number, number, number];
+type CountryLook = { fill: Rgb; line: string | null; opacity: number };
+
+function hexToRgb(hex: string): Rgb {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+const rgbCss = ([r, g, b]: Rgb) => `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+
 // Per dev-prompt-chatgpt.md "MAP MATCH SWITCHING": the map instance is
 // created exactly once (mount effect below). Match switches and new votes
 // only call setFeatureState — the map, source and layers are never
@@ -37,6 +52,8 @@ export function GlobalMap({
   results: CountryResult[];
 }) {
   const theme = useTheme();
+  // Start downloading the map data with the page (MapLibre only).
+  preloadMapData({ labels: true });
   // "loading" until the map has drawn the world; "error" if it can't start
   // (missing Mapbox token, blocked network, WebGL unavailable); "paused"
   // when this month's Mapbox budget is used up (lib/mapBudgetServer.ts;
@@ -50,11 +67,14 @@ export function GlobalMap({
   const loadedRef = useRef(false);
   // Countries we've colored, so the next update can clear exactly those
   // first — otherwise a country colored for the previous match would stay.
-  const coloredCountriesRef = useRef<Set<string>>(new Set());
+  // What each colored country currently shows, so the next update can fade
+  // from there (and clear countries the new match/results don't color).
+  const shownRef = useRef<Map<string, CountryLook>>(new Map());
+  const fadeFrameRef = useRef(0);
 
   // The mount effect owns applyResults (it needs the map instance); this
   // ref lets the last effect below call it on every match switch / new vote.
-  const applyResultsRef = useRef<(() => void) | null>(null);
+  const applyResultsRef = useRef<((options?: { animate?: boolean }) => void) | null>(null);
 
   // Latest props for the event handlers created once in the mount effect.
   const matchRef = useRef(match);
@@ -86,6 +106,11 @@ export function GlobalMap({
       countryLabels: true,
     });
     mapRef.current = map;
+    // Development only (removed from production builds): lets scripts and
+    // the browser console inspect the map, e.g. which labels are placed.
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __fanmapMap?: mapboxgl.Map }).__fanmapMap = map;
+    }
     map.touchZoomRotate.disableRotation();
     map.addControl(new engine.NavigationControl({ showCompass: false }), "bottom-right");
 
@@ -116,8 +141,21 @@ export function GlobalMap({
     map.on("load", () => {
       engine.setupLayers(map, { withHover: true, countryLabels: true, theme: themeRef.current });
       loadedRef.current = true;
-      applyResults();
+      // The map fades in with its colors already in place (no fade here).
+      applyResults({ animate: false });
       setMapStatus("ready");
+    });
+
+    // The browser can take the map's graphics context away (iOS Safari does
+    // it to pages in the background). The library redraws the shapes when
+    // it's back, but the team colors are lost with it: paint them again.
+    // MapLibre reloads its whole style on restore, so wait until that's done.
+    map.on("webglcontextrestored", () => {
+      if (!loadedRef.current) return;
+      map.once("idle", () => {
+        shownRef.current = new Map();
+        applyResults({ animate: false });
+      });
     });
 
     // The map reports many harmless errors (a single tile timing out); only
@@ -169,49 +207,96 @@ export function GlobalMap({
         .addTo(map);
     });
 
-    map.on("mouseleave", FILL_LAYER_ID, () => {
+    function clearHover() {
       setHover(hoveredId, false);
       hoveredId = null;
       popup.remove();
-    });
+      map.getCanvas().style.cursor = "";
+    }
+    map.on("mouseleave", FILL_LAYER_ID, clearHover);
+    // Leaving the map straight from a country (e.g. onto the header above
+    // it) must clear the outline and tooltip too.
+    map.on("mouseout", clearHover);
 
-    // Paints the map for the current match, results and light/dark mode.
-    function applyResults() {
+    // Paints the map for the current match, results and light/dark mode,
+    // fading each country from what it shows now to its new look.
+    function applyResults({ animate = true }: { animate?: boolean } = {}) {
       if (!loadedRef.current) return;
       const m = matchRef.current;
       const colors = getMatchColors(m, themeRef.current);
       const palette = MAP_PALETTE[themeRef.current];
       applyMapPalette(map, themeRef.current);
 
-      for (const code of coloredCountriesRef.current) {
-        map.setFeatureState(engine.country(code), { fillColor: null, lineColor: null, opacity: 0 });
-      }
-      coloredCountriesRef.current = new Set();
-
+      const target = new Map<string, CountryLook>();
       for (const r of resultsRef.current) {
         if (r.totalVotes === 0) continue;
-        let state: { fillColor: string; lineColor: string | null; opacity: number };
         if (!r.leadingTeamId) {
-          state = { fillColor: palette.undecided, lineColor: null, opacity: UNDECIDED_OPACITY };
+          target.set(r.countryCode, { fill: hexToRgb(palette.undecided), line: null, opacity: UNDECIDED_OPACITY });
         } else {
           const homeLeads = r.leadingTeamId === m.home_team_id;
           const leaderVotes = homeLeads ? r.homeVotes : r.awayVotes;
           const color = homeLeads ? colors.home : colors.away;
-          state = { fillColor: color, lineColor: color, opacity: opacityForShare(leaderVotes / r.totalVotes) };
+          target.set(r.countryCode, {
+            fill: hexToRgb(color),
+            line: color,
+            opacity: opacityForShare(leaderVotes / r.totalVotes),
+          });
         }
-        map.setFeatureState(engine.country(r.countryCode), state);
-        coloredCountriesRef.current.add(r.countryCode);
       }
+
+      // From → to for every country that is colored now or will be. A
+      // country appearing fades in in its new color, one disappearing fades
+      // out in its old one.
+      const from = shownRef.current;
+      const changes: Array<{ code: string; a: CountryLook; b: CountryLook }> = [];
+      for (const code of new Set([...from.keys(), ...target.keys()])) {
+        const a = from.get(code);
+        const b = target.get(code);
+        const start = a ?? { ...b!, opacity: 0, line: null };
+        const end = b ?? { ...a!, opacity: 0, line: null };
+        if (a && b && a.opacity === b.opacity && a.line === b.line && a.fill.every((v, i) => v === b.fill[i])) continue;
+        changes.push({ code, a: start, b: end });
+      }
+      shownRef.current = target;
+
+      const paint = (t: number) => {
+        for (const { code, a, b } of changes) {
+          const done = t >= 1;
+          const opacity = mix(a.opacity, b.opacity, t);
+          map.setFeatureState(engine.country(code), {
+            fillColor: done && b.opacity === 0 ? null : rgbCss(a.fill.map((v, i) => mix(v, b.fill[i], t)) as Rgb),
+            // The border switches to the team color halfway, with the fill.
+            lineColor: t < 0.5 ? a.line : b.line,
+            opacity,
+          });
+        }
+      };
+
+      cancelAnimationFrame(fadeFrameRef.current);
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!animate || reduceMotion || changes.length === 0) {
+        paint(1);
+        return;
+      }
+      const startTime = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min((now - startTime) / COLOR_FADE_MS, 1);
+        paint(1 - Math.pow(1 - t, 3)); // ease-out
+        if (t < 1) fadeFrameRef.current = requestAnimationFrame(tick);
+      };
+      fadeFrameRef.current = requestAnimationFrame(tick);
     }
     applyResultsRef.current = applyResults;
 
     return () => {
+      cancelAnimationFrame(fadeFrameRef.current);
       resizeObserver.disconnect();
       popup.remove();
       map.remove();
       mapRef.current = null;
       loadedRef.current = false;
       applyResultsRef.current = null;
+      shownRef.current = new Map();
     };
   }
 
@@ -252,8 +337,18 @@ export function GlobalMap({
   }, [match.id, results, theme]);
 
   return (
-    <div className="relative h-full w-full">
-      <div ref={containerRef} className="h-full w-full" />
+    <div className="relative h-full w-full" data-map-status={mapStatus}>
+      {/* Hidden until the map has drawn the world with its colors, then
+          faded in: no empty map first, no colors repainted after. The fade
+          is on a wrapper: the map library adds its own classes to the
+          container itself, which a changing className would wipe out. */}
+      <div
+        className={`h-full w-full transition-opacity duration-500 ease-out motion-reduce:transition-none ${
+          mapStatus === "ready" ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div ref={containerRef} role="region" aria-label="World map: the team each country supports" className="h-full w-full" />
+      </div>
       {mapStatus !== "ready" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center">
           {mapStatus === "paused" ? (
@@ -262,7 +357,9 @@ export function GlobalMap({
               far are still in the match list.
             </p>
           ) : mapStatus === "loading" ? (
-            <p role="status" className="text-sm text-muted motion-safe:animate-pulse">
+            // Shown only if loading takes a while (the delay is in
+            // globals.css), so a quick load is just the map fading in.
+            <p role="status" className="fanmap-map-loading text-sm text-muted">
               Loading the map…
             </p>
           ) : (
