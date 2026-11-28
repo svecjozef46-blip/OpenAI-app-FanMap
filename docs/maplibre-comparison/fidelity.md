@@ -262,7 +262,7 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 
 ## Snímky pred a po
 
-Úvodná mapa: vľavo produkcia (`main`), vpravo náhľad tejto vetvy na Verceli, rovnaké okno. Výrezy sú v pixeloch zariadenia, zväčšené bez vyhladzovania (`tools/hero-shots.cjs`, `tools/compose-hero.py`). Snímky s obmedzeným pohybom, preto ukazujú hotové farby; zápas v úvode sa môže medzi stránkami líšiť.
+Úvodná mapa: vľavo produkcia (`main` k 28. 11., teda už s predvolenou toleranciou z #6), vpravo náhľad tejto vetvy na Verceli (presné tvary, Čukotka celá, mapa nižšie), rovnaké okno. Výrezy sú v pixeloch zariadenia, zväčšené bez vyhladzovania (`tools/hero-shots.cjs`, `tools/compose-hero.py`). Snímky s obmedzeným pohybom, preto ukazujú hotové farby; zápas v úvode sa môže medzi stránkami líšiť.
 
 | Okno | Celé | Výrezy |
 |---|---|---|
