@@ -203,9 +203,9 @@ function SupportButton({
       aria-pressed={isMine}
       aria-label={label}
       title={label}
-      className={`group flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-1.5 transition-all duration-200 ${
-        side === "away" ? "flex-row-reverse text-right" : "text-left"
-      } ${isMine ? "border-accent bg-accent/10" : closed ? "border-transparent bg-transparent" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
+      className={`group flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 transition-all duration-200 ${
+        team.logo_url ? "py-1.5" : "justify-center py-1"
+      } ${side === "away" ? "flex-row-reverse text-right" : "text-left"} ${isMine ? "border-accent bg-accent/10" : closed ? "border-transparent bg-transparent" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
         disabled ? "cursor-default" : "cursor-pointer hover:border-fg/30 hover:bg-bg"
       } focus-visible:outline-2 focus-visible:outline-accent`}
     >
@@ -213,13 +213,9 @@ function SupportButton({
         {/* The initials badge already shows the short name, so it is not
             repeated as text beside it; the badge gets that space instead. A
             real crest (logo_url) has no text, so the short name stays. */}
-        <TeamBadge team={team} size={team.logo_url ? 28 : 36} />
+        <TeamBadge team={team} size={team.logo_url ? 28 : 32} />
       </span>
-      {team.logo_url ? (
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{team.short_name}</span>
-      ) : (
-        <span className="flex-1" aria-hidden="true" />
-      )}
+      {team.logo_url && <span className="min-w-0 flex-1 truncate text-sm font-semibold">{team.short_name}</span>}
       {isMine && <CheckIcon />}
     </button>
   );
