@@ -147,9 +147,14 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       const padding = wide
         ? { top: 12, bottom: 12, left: Math.round(container.clientWidth * 0.1), right: 12 }
         : { top: 8, bottom: 96, left: 8, right: 8 };
-      // MapLibre: 169° W – 191° E, Chukotka whole (see frameHeroWorld).
-      if (engine.name === "maplibre") frameHeroWorld(map, padding);
-      else fitWorld(map, padding);
+      // MapLibre: 169° W – 191° E, Chukotka whole (see frameHeroWorld). On
+      // desktop a band of ocean (4% of the map's height) stays under Tierra
+      // del Fuego: flush with the bottom edge the map sat too low.
+      if (engine.name === "maplibre") {
+        frameHeroWorld(map, wide ? { ...padding, bottom: padding.bottom + Math.round(container.clientHeight * 0.04) } : padding);
+      } else {
+        fitWorld(map, padding);
+      }
     });
     resizeObserver.observe(container);
 

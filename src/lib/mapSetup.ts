@@ -100,9 +100,9 @@ export function fitWorld(map: mapboxgl.Map, padding: MapPadding) {
 // The left edge runs through the Bering Strait, between Alaska's western
 // tip (168.1° W) and Russia's eastern tip, Cape Dezhnev (169.7° W = 190.3°
 // E), so Alaska and Chukotka are both whole (scripts/build-countries.mjs
-// keeps Chukotka joined to Russia across 180°). Vertically it sits as low
-// as it can with Tierra del Fuego still in view, so as little of the
-// Arctic as possible is cut off at the top; if the whole north fits, it's
+// keeps Chukotka joined to Russia across 180°). Vertically Tierra del Fuego
+// sits `padding.bottom` above the bottom edge, so as little of the Arctic as
+// the padding allows is cut off at the top; if the whole north fits, it's
 // centred. Needs renderWorldCopies (what lies past 180° is drawn from the
 // next copy of the world); a view exactly one world wide shows nothing
 // twice.
