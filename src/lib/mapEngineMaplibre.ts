@@ -98,10 +98,26 @@ type CountryData = { countriesUrl: string; labels: GeoJSON.FeatureCollection };
 let countryData: CountryData | null = null;
 let loadingData: Promise<CountryData> | null = null;
 
+// With a few retries: one failed request (a flaky connection, or a file
+// the CDN is fetching for the first time right after a deployment) used to
+// leave the home-page map empty, and the match map on "couldn't load", until
+// the page was reloaded. A 4xx answer isn't retried: it won't change.
+const RETRY_DELAYS_MS = [500, 1500, 3000];
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
-  return response.json() as Promise<T>;
+  for (let attempt = 0; ; attempt++) {
+    let error: unknown;
+    try {
+      const response = await fetch(url);
+      if (response.ok) return (await response.json()) as T;
+      error = new Error(`${url}: HTTP ${response.status}`);
+      if (response.status < 500) throw error;
+    } catch (caught) {
+      if (caught === error && error !== undefined) throw caught; // 4xx
+      error = caught;
+    }
+    if (attempt >= RETRY_DELAYS_MS.length) throw error;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+  }
 }
 
 // TopoJSON decodes to long fractions (12.345678901…); 4 decimals (~10 m)
@@ -121,7 +137,14 @@ function roundCoordinates(collection: GeoJSON.FeatureCollection) {
 }
 
 export function loadCountryData(): Promise<CountryData> {
-  loadingData ??= Promise.all([fetchJson<Topology>(COUNTRIES_URL), fetchJson<GeoJSON.FeatureCollection>(COUNTRY_LABELS_URL)])
+  if (loadingData) return loadingData;
+  // Country names are only needed on the match map, and a map without names
+  // beats no map: if they can't be loaded, the map is drawn without them.
+  const labels = fetchJson<GeoJSON.FeatureCollection>(COUNTRY_LABELS_URL).catch((error) => {
+    console.error("Country names failed to load:", error);
+    return { type: "FeatureCollection", features: [] } as GeoJSON.FeatureCollection;
+  });
+  loadingData = Promise.all([fetchJson<Topology>(COUNTRIES_URL), labels])
     .then(([topology, labels]) => {
       const countries = feature(topology, topology.objects.countries) as GeoJSON.FeatureCollection;
       roundCoordinates(countries);
