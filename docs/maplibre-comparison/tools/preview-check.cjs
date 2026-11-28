@@ -52,18 +52,26 @@ async function setUp(context, results) {
   report.engine = await page.evaluate(() => (document.querySelector(".maplibregl-map") ? "maplibre" : "mapbox"));
   const canvas = await page.evaluateHandle(() => document.querySelector("canvas"));
 
-  // Hover over Brazil (world view, 1440×900, sidebar open).
-  await page.mouse.move(705, 610);
-  await page.mouse.move(712, 615);
-  await page.waitForTimeout(500);
-  report.hoverTooltip = await page.evaluate(() => document.querySelector(".fanmap-popup")?.innerText.split("\n")[0] ?? null);
+  // Hover over South America (world view, 1440×900, sidebar open): a few
+  // points along a line, so a small change of framing doesn't miss land.
+  report.hoverTooltip = null;
+  for (let x = 640; x <= 760 && !report.hoverTooltip; x += 20) {
+    await page.mouse.move(x, 610);
+    await page.mouse.move(x + 5, 615);
+    await page.waitForTimeout(400);
+    report.hoverTooltip = await page.evaluate(() => document.querySelector(".fanmap-popup")?.innerText.split("\n")[0] ?? null);
+  }
   await page.mouse.move(700, 20); // onto the header, off the map
   await page.waitForTimeout(400);
   report.tooltipGoneAfterLeavingMap = await page.evaluate(() => !document.querySelector(".fanmap-popup"));
 
-  // Vote for the home team of the selected match (answered locally).
+  // Vote for a team (answered locally): the selected match if it's still
+  // open, otherwise the first match in the list that is.
   voted = true;
-  const voteButton = page.locator('nav[aria-label="Matches"] li', { hasText: "On the map" }).locator("button").first();
+  const selected = page.locator('nav[aria-label="Matches"] li', { hasText: "On the map" }).locator("button:not([disabled])");
+  const voteButton = (await selected.count())
+    ? selected.first()
+    : page.locator('nav[aria-label="Matches"] li button[aria-pressed]:not([disabled])').first();
   await voteButton.click();
   await page.waitForTimeout(2500);
   report.voteShownAsMine = await voteButton.getAttribute("aria-pressed");
