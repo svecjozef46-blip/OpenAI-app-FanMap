@@ -348,6 +348,23 @@ Všetko na produkčnom builde (`next build` + `next start`) v tomto prostredí, 
 Z čoho je rozdiel (vývojový server, medián 8 meraní, čas od vytvorenia mapy): **dlaždice pripravené** (práca workera – rezanie tvarov) mapa zápasu 0,62 → 0,75 s, úvodná mapa 0,86 → 1,06–1,15 s (druhá kópia tvarov pre hranice); **mapa nakreslená** mapa zápasu 1,52 → 2,05–2,27 s, úvodná 1,45–1,49 → 1,83–1,98 s. Väčšina rozdielu je až po príprave dlaždíc, teda prvé kreslenie viacerých vrcholov (a umiestnenie popiskov) – na softvérovom WebGL drahé, na grafickom čipe lacné. Na zariadení zostane hlavne rozdiel workera, ~0,1–0,3 s. Druhá kópia tvarov stála na mape zápasu ~0,5 s a tam animácia nie je, preto ju mapa zápasu nemá.
 
 
+## Prvé načítanie po nasadení (mapa sa raz nevykreslila ani po 6 s)
+
+Pozorované 28. 11. hneď po nasadení, pri ďalšom načítaní už v poriadku.
+
+- **Nereprodukované ako systematická chyba.** Sedem načítaní s prázdnou vyrovnávacou pamäťou hneď po novom nasadení náhľadu (prázdna cache aj na CDN) skončilo za 2,7–3,7 s; tvary sa stiahli za < 0,2 s. Poradie načítania je v poriadku: `preloadMapData()` začne sťahovať dáta spolu so stránkou, `loadCountryData()` použije tú istú odpoveď, mapa sa vytvorí až s dátami.
+- **Našla sa však slabina, ktorá presne zodpovedá pozorovaniu:** stačila jedna neúspešná požiadavka na dáta mapy (výpadok spojenia, alebo súbor, ktorý CDN po nasadení ešte len sťahuje) a úvodná mapa ostala prázdna, mapa zápasu na chybovom stave – až do znovunačítania stránky. Overené vložením chyby do prehliadača (`tools/load-faults.cjs`, lokálny produkčný build):
+
+| Prípad (prázdna cache) | Úvodná mapa pred → po | Mapa zápasu pred → po |
+|---|---|---|
+| bez chyby | 3,0 s → 2,9 s | 2,2 s → 2,3 s |
+| dáta krajín zlyhajú raz | **nikdy** → 3,4 s | **chyba** → 2,9 s |
+| názvy krajín zlyhajú raz | **nikdy** → 4,1 s | **chyba** → 3,2 s |
+| kód MapLibre zlyhá raz | 3,5 s → 3,7 s (Next.js ho skúsi znova sám) | 3,0 s → 3,1 s |
+| dáta krajín o 5 s pomalšie | 7,6 s → 8,1 s | 7,4 s → 7,3 s |
+
+- **Oprava (`fetchJson` v `src/lib/mapEngineMaplibre.ts`):** neúspešná požiadavka sa zopakuje po 0,5 / 1,5 / 3 s (odpoveď 4xx nie, tá sa nezmení). Názvy krajín už mapu neblokujú – úvodná mapa ich nepotrebuje a mapa zápasu sa bez nich radšej vykreslí bez popisiek, než aby ostala prázdna.
+
 ## Metodika
 
 Nástroj: `docs/maplibre-comparison/tools/shape-fidelity.cjs` (Playwright + Chromium, beží proti `npm run dev`, lebo potrebuje vývojárske sprístupnenie mapy cez `window.__fanmapHeroMap` / `window.__fanmapMap`, ktoré v produkčnom builde nie je).

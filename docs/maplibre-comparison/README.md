@@ -20,6 +20,7 @@ Snímky z 2026-11-26 (fáza 1 prechodu na MapLibre). Na každom obrázku je vľa
 | `hero-fps.cjs <adresa> [spomalenie CPU] [okno, napr. 390x844]` | plynulosť úvodnej animácie (snímky/s, JavaScript na snímku, čas do zobrazenia) a správanie pri obmedzenom pohybe |
 | `shape-fidelity.cjs <adresa> [výstup.json]` | o koľko pixelov sa vykreslené obrysy krajín líšia od zdrojových tvarov, obe mapy, 6 veľkostí okna × DPR 1 a 2 (`npm run dev`); pozri [fidelity.md](fidelity.md) |
 | `fidelity-table.cjs pred=a.json po=b.json` | tabuľky do `fidelity.md` z výsledkov `shape-fidelity.cjs` |
+| `load-faults.cjs <adresa>` | studené načítanie úvodnej a zápasovej mapy, keď jedna požiadavka mapy raz zlyhá alebo mešká 5 s: či a kedy sa mapa vykreslí |
 | `fps-table.cjs <výsledky.jsonl>` | tabuľka z viacerých behov `hero-fps.cjs` |
 | `hero-shots.cjs <priečinok> <pred> <po> <dev adresa>` + `compose-hero.py` | snímky úvodnej mapy pred/po a zväčšené výrezy (Kanada, Austrália, Indonézia, Nórsko) |
 | `preview-check.cjs <adresa>` | engine, žiadne požiadavky na Mapbox, hover, hlas (zodpovedaný v prehliadači, nič sa nezapíše), prepnutie zápasu a témy, nápoveda dvoch prstov na telefóne |
