@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import type mapboxgl from "mapbox-gl";
 import type { HeroCountry } from "@/lib/heroPreview";
 import { useTheme } from "@/lib/theme";
-import { applyMapPalette, fitWorld, frameHeroWorld } from "@/lib/mapSetup";
+import { applyMapPalette, fitWorld, frameWorld } from "@/lib/mapSetup";
 import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, preloadMapData, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad } from "@/lib/mapBudget";
 
@@ -147,11 +147,11 @@ export function HeroMap({ slide }: { slide: HeroSlide }) {
       const padding = wide
         ? { top: 12, bottom: 12, left: Math.round(container.clientWidth * 0.1), right: 12 }
         : { top: 8, bottom: 96, left: 8, right: 8 };
-      // MapLibre: 169° W – 191° E, Chukotka whole (see frameHeroWorld). On
+      // MapLibre: 169° W – 191° E, Chukotka whole (see frameWorld). On
       // desktop a band of ocean (7% of the map's height) stays under Tierra
       // del Fuego: flush with the bottom edge the map sat too low.
       if (engine.name === "maplibre") {
-        frameHeroWorld(map, wide ? { ...padding, bottom: padding.bottom + Math.round(container.clientHeight * 0.07) } : padding);
+        frameWorld(map, wide ? { ...padding, bottom: padding.bottom + Math.round(container.clientHeight * 0.07) } : padding);
       } else {
         fitWorld(map, padding);
       }
