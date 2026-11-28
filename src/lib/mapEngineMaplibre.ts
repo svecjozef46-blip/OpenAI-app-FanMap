@@ -173,11 +173,13 @@ function buildStyle({
         // Interactive map: MapLibre's default simplification per zoom level
         // (it only drops detail smaller than a pixel); turning it down made
         // the world view draw ~20% slower for no visible gain.
-        // Home-page map (fixed world view, colors animated every frame):
-        // coarser shapes and no tiles past zoom 3, so recoloring ~100
-        // countries per frame stays smooth on slower phones.
-        // Measured 2026-11-26, docs/maplibre.md.
-        ...(interactive ? { tolerance: 0.375 } : { tolerance: 1.5, maxzoom: 3 }),
+        // Home-page map (fixed world view, colors animated every frame): no
+        // tiles past zoom 3, so recoloring ~100 countries per frame stays
+        // smooth on slower phones. It used to also use a 4x coarser
+        // tolerance (1.5), but on a wide desktop screen that showed as
+        // jagged, faceted coastlines (Canada's islands, Australia,
+        // Indonesia), so since 2026-11-27 it keeps the default.
+        ...(interactive ? { tolerance: 0.375 } : { maxzoom: 3 }),
       },
     },
     // No background layer: transparent oceans, the page shows through.
