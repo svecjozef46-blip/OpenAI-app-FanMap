@@ -260,6 +260,23 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 </details>
 
 
+## Snímky pred a po
+
+Úvodná mapa: vľavo produkcia (`main`), vpravo náhľad tejto vetvy na Verceli, rovnaké okno. Výrezy sú v pixeloch zariadenia, zväčšené bez vyhladzovania (`tools/hero-shots.cjs`, `tools/compose-hero.py`). Snímky s obmedzeným pohybom, preto ukazujú hotové farby; zápas v úvode sa môže medzi stránkami líšiť.
+
+| Okno | Celé | Výrezy |
+|---|---|---|
+| 1680 × 1050, DPR 1, tmavý | [celé okno](fidelity/shots/hero-1680x1050@1-dark.jpg) | [Kanada](fidelity/shots/hero-1680x1050@1-dark-canada.png) · [Austrália](fidelity/shots/hero-1680x1050@1-dark-australia.png) · [Indonézia](fidelity/shots/hero-1680x1050@1-dark-indonesia.png) · [Nórsko](fidelity/shots/hero-1680x1050@1-dark-norway.png) |
+| 1680 × 1050, DPR 1, svetlý | [celé okno](fidelity/shots/hero-1680x1050@1-light.jpg) | [Kanada](fidelity/shots/hero-1680x1050@1-light-canada.png) · [Austrália](fidelity/shots/hero-1680x1050@1-light-australia.png) · [Indonézia](fidelity/shots/hero-1680x1050@1-light-indonesia.png) · [Nórsko](fidelity/shots/hero-1680x1050@1-light-norway.png) |
+| 2560 × 1440, DPR 2 (5K), tmavý | [celé okno](fidelity/shots/hero-2560x1440@2-dark.jpg) | [Kanada](fidelity/shots/hero-2560x1440@2-dark-canada.png) · [Austrália](fidelity/shots/hero-2560x1440@2-dark-australia.png) · [Indonézia](fidelity/shots/hero-2560x1440@2-dark-indonesia.png) · [Nórsko](fidelity/shots/hero-2560x1440@2-dark-norway.png) |
+| 2560 × 1440, DPR 2 (5K), svetlý | [celé okno](fidelity/shots/hero-2560x1440@2-light.jpg) | [Kanada](fidelity/shots/hero-2560x1440@2-light-canada.png) · [Austrália](fidelity/shots/hero-2560x1440@2-light-australia.png) · [Indonézia](fidelity/shots/hero-2560x1440@2-light-indonesia.png) · [Nórsko](fidelity/shots/hero-2560x1440@2-light-norway.png) |
+| telefón 390 × 844, DPR 2, tmavý | [celé okno](fidelity/shots/hero-390x844@2-dark.jpg) | [Kanada](fidelity/shots/hero-390x844@2-dark-canada.png) · [Austrália](fidelity/shots/hero-390x844@2-dark-australia.png) · [Indonézia](fidelity/shots/hero-390x844@2-dark-indonesia.png) · [Nórsko](fidelity/shots/hero-390x844@2-dark-norway.png) |
+| telefón 390 × 844, DPR 2, svetlý | [celé okno](fidelity/shots/hero-390x844@2-light.jpg) | [Kanada](fidelity/shots/hero-390x844@2-light-canada.png) · [Austrália](fidelity/shots/hero-390x844@2-light-australia.png) · [Indonézia](fidelity/shots/hero-390x844@2-light-indonesia.png) · [Nórsko](fidelity/shots/hero-390x844@2-light-norway.png) |
+
+![Kanada, 1680 × 1050, pred a po](fidelity/shots/hero-1680x1050@1-dark-canada.png)
+
+![Indonézia, 2560 × 1440 @ 2, pred a po](fidelity/shots/hero-2560x1440@2-light-indonesia.png)
+
 ## 180. poludník (Čukotka, Aleuty, Fidži, Kiribati)
 
 Skontrolované na snímkach aj meraním (Rusko, USA, Fidži a Kiribati sú medzi meranými krajinami; prvé meranie ukázalo pri Rusku chybu 4,2 px na −180°, bola to chyba nástroja – úsečka rezu na −180° ležala o 10⁻¹⁰ px mimo mriežky hľadania, opravené).
