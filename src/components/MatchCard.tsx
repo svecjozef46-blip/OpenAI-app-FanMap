@@ -42,12 +42,12 @@ export function MatchCard({
 }) {
   const { status, errorMessage, myVoteTeamId, vote } = useVote(match.id, () => onSelect(match.id));
   const kickoff = useKickoffLabel(match.kickoff_at);
-  const { homePct, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
+  const { homePct, homeText, awayText, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
   const isClosed = isVotingClosed(match.status);
   // Monthly map budget used up: buttons off, the note and the banner say why.
   const isPaused = useMapBudget()?.paused === true;
   const canVote = myVoteTeamId === null && status !== "pending" && !isClosed && !isPaused;
-  const split = isEmpty ? "no votes" : `${homePct}% · ${100 - homePct}%`;
+  const split = isEmpty ? "no votes" : `${homeText}% · ${awayText}%`;
   const matchStatus = STATUS[match.status];
 
   let note: { text: string; isError: boolean };
@@ -57,7 +57,7 @@ export function MatchCard({
   else if (isPaused && !isClosed && myVoteTeamId === null) note = { text: `Voting paused · ${split}`, isError: false };
   else if (isClosed) note = { text: `Voting closed · ${isEmpty ? "no votes" : `final ${split}`}`, isError: false };
   else if (myVoteTeamId === null) note = { text: isEmpty ? "Tap the team you support" : `${split} · tap your team`, isError: false };
-  else note = { text: isEmpty ? "No votes yet" : `${homePct}% · ${100 - homePct}%`, isError: false };
+  else note = { text: isEmpty ? "No votes yet" : `${homeText}% · ${awayText}%`, isError: false };
 
   return (
     <div
@@ -129,7 +129,7 @@ export function MatchLinkCard({
   leagueName: string | undefined;
 }) {
   const kickoff = useKickoffLabel(match.kickoff_at);
-  const { homePct, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
+  const { homePct, homeText, awayText, isEmpty } = splitPercent(totals?.home ?? 0, totals?.away ?? 0);
   return (
     <Link
       href={`/match/${match.id}`}
@@ -146,7 +146,7 @@ export function MatchLinkCard({
       <div className="mt-auto flex flex-col gap-3">
         <CardBar match={match} homePct={homePct} isEmpty={isEmpty} />
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted">{isEmpty ? "No votes yet" : `${homePct}% · ${100 - homePct}%`}</span>
+          <span className="text-muted">{isEmpty ? "No votes yet" : `${homeText}% · ${awayText}%`}</span>
           <span className="font-medium text-accent group-hover:underline">
             Show your support <span aria-hidden="true">→</span>
           </span>
@@ -203,16 +203,19 @@ function SupportButton({
       aria-pressed={isMine}
       aria-label={label}
       title={label}
-      className={`group flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-1.5 transition-all duration-200 ${
-        side === "away" ? "flex-row-reverse text-right" : "text-left"
-      } ${isMine ? "border-accent bg-accent/10" : closed ? "border-transparent bg-transparent" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
+      className={`group flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 transition-all duration-200 ${
+        team.logo_url ? "py-1.5" : "justify-center py-1"
+      } ${side === "away" ? "flex-row-reverse text-right" : "text-left"} ${isMine ? "border-accent bg-accent/10" : closed ? "border-transparent bg-transparent" : "border-line bg-bg/60"} ${dimmed ? "opacity-40" : ""} ${
         disabled ? "cursor-default" : "cursor-pointer hover:border-fg/30 hover:bg-bg"
       } focus-visible:outline-2 focus-visible:outline-accent`}
     >
       <span className={`shrink-0 transition-transform ${disabled ? "" : "group-hover:scale-105"}`}>
-        <TeamBadge team={team} size={28} />
+        {/* The initials badge already shows the short name, so it is not
+            repeated as text beside it; the badge gets that space instead. A
+            real crest (logo_url) has no text, so the short name stays. */}
+        <TeamBadge team={team} size={team.logo_url ? 28 : 32} />
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{team.short_name}</span>
+      {team.logo_url && <span className="min-w-0 flex-1 truncate text-sm font-semibold">{team.short_name}</span>}
       {isMine && <CheckIcon />}
     </button>
   );

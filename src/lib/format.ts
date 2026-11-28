@@ -39,12 +39,4 @@ export function isVotingClosed(status: string): boolean {
   return status === "finished" || status === "archived";
 }
 
-// Percent split that always adds up to 100. With zero votes it returns
-// 50/50 and `isEmpty`, so the UI can show a neutral placeholder instead of
-// pretending there's real support.
-export function splitPercent(home: number, away: number) {
-  const total = home + away;
-  if (total === 0) return { homePct: 50, awayPct: 50, total, isEmpty: true };
-  const homePct = Math.round((home / total) * 100);
-  return { homePct, awayPct: 100 - homePct, total, isEmpty: false };
-}
+export { percentDecimals, splitPercent } from "./percent";
