@@ -17,7 +17,12 @@ Snímky z 2026-11-26 (fáza 1 prechodu na MapLibre). Na každom obrázku je vľa
 | `labels.cjs <adresa> [šírka] [výška]` | ktoré krajiny majú popisku vo svete, Európe, Ázii a Južnej Amerike a ktoré chýbajú (potrebuje `npm run dev`) |
 | `overlaps.cjs <adresa>` | či ovládacie prvky neprekrývajú popisky, na 10 veľkostiach obrazovky (`npm run dev`) |
 | `perf.cjs <názov> <adresa> [počet]` | prenesené bajty a čas do zobrazenia mapy |
-| `hero-fps.cjs <adresa> [spomalenie CPU]` | plynulosť úvodnej animácie a správanie pri obmedzenom pohybe |
+| `hero-fps.cjs <adresa> [spomalenie CPU] [okno, napr. 390x844]` | plynulosť úvodnej animácie (snímky/s, JavaScript na snímku, čas do zobrazenia) a správanie pri obmedzenom pohybe |
+| `shape-fidelity.cjs <adresa> [výstup.json]` | o koľko pixelov sa vykreslené obrysy krajín líšia od zdrojových tvarov, obe mapy, 6 veľkostí okna × DPR 1 a 2 (`npm run dev`); pozri [fidelity.md](fidelity.md) |
+| `fidelity-table.cjs pred=a.json po=b.json` | tabuľky do `fidelity.md` z výsledkov `shape-fidelity.cjs` |
+| `load-faults.cjs <adresa>` | studené načítanie úvodnej a zápasovej mapy, keď jedna požiadavka mapy raz zlyhá alebo mešká 5 s: či a kedy sa mapa vykreslí |
+| `fps-table.cjs <výsledky.jsonl>` | tabuľka z viacerých behov `hero-fps.cjs` |
+| `hero-shots.cjs <priečinok> <pred> <po> <dev adresa>` + `compose-hero.py` | snímky úvodnej mapy pred/po a zväčšené výrezy (Kanada, Austrália, Indonézia, Nórsko) |
 | `preview-check.cjs <adresa>` | engine, žiadne požiadavky na Mapbox, hover, hlas (zodpovedaný v prehliadači, nič sa nezapíše), prepnutie zápasu a témy, nápoveda dvoch prstov na telefóne |
 
 Chránený preview: adresa so `?_vercel_share=…`. Pozor: snímanie produkcie pri Mapboxe pripočíta spustenia do produkčného počítadla mapy (každý pohľad jedno).

@@ -52,6 +52,13 @@ export type MapEngine = {
   // country layers and applies the light/dark palette.
   setupLayers(map: mapboxgl.Map, options: { withHover: boolean; countryLabels: boolean; theme: Theme }): void;
   country(id: string | number): CountryFeature;
+  // Where a country's border state (`lineColor`) lives on this map. On the
+  // MapLibre home-page map (created with `interactive: false`) the borders
+  // are drawn from a second copy of the shapes, so that the light-up
+  // animation, which changes each fill every frame, doesn't make the map
+  // recompute every border too; there, set the border only when it changes.
+  // Everywhere else it's the same feature as country().
+  outline(map: mapboxgl.Map, id: string | number): CountryFeature;
 };
 
 let loading: Promise<MapEngine> | null = null;

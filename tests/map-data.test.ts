@@ -94,3 +94,28 @@ test("every country over 100,000 km² is labelled from world view, bigger ones p
     assert.equal(f.properties.minzoom, 0, code);
   }
 });
+
+test("Russia and Fiji are joined across 180° (no border line through Chukotka on the home-page map)", () => {
+  // scripts/build-countries.mjs moves their parts just west of 180° to
+  // 180–191° E and merges them with the rest (ACROSS_180).
+  for (const code of ["RU", "FJ"]) {
+    const f = countries.find((c) => c.properties.code === code)!;
+    const polygons = (f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates) as number[][][][];
+    let maxLng = -Infinity;
+    let alongMeridianKm = 0;
+    for (const polygon of polygons)
+      for (const ring of polygon)
+        for (let i = 0; i < ring.length; i++) {
+          maxLng = Math.max(maxLng, ring[i][0]);
+          const onMeridian = (lng: number) => Math.abs(Math.abs(lng) - 180) < 0.001;
+          if (i && onMeridian(ring[i][0]) && onMeridian(ring[i - 1][0])) alongMeridianKm += Math.abs(ring[i][1] - ring[i - 1][1]) * 111;
+          assert.ok(ring[i][0] > -170, `${code} has a part west of 170° W left unjoined`);
+        }
+    assert.ok(maxLng > 180, `${code} doesn't reach past 180°`);
+    assert.ok(alongMeridianKm < 1, `${code}: ${alongMeridianKm.toFixed(1)} km of edge along 180°`);
+  }
+  // Cape Dezhnev, Russia's eastern tip, at 190.3° E: inside the home map's 169° W – 191° E.
+  const ru = countries.find((c) => c.properties.code === "RU")!;
+  const lngs = ((ru.geometry.coordinates as number[][][][]).flat(2) as number[][]).map((p) => p[0]);
+  assert.ok(Math.max(...lngs) < 191, "Russia must end before the home map's east edge (191° E)");
+});

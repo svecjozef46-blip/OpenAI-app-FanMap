@@ -13,9 +13,9 @@ Hodnota sa číta pri **builde**: `next.config.ts` ju vždy vloží do kódu (aj
 
 ## Ako je to postavené
 
-- `src/lib/mapEngine.ts` — prepínač, tenké rozhranie enginov (`createMap`, `Popup`, `NavigationControl`, `setupLayers`, `country`) a `preloadMapData()`. `GlobalMap` a `HeroMap` sú spoločné pre oba enginy.
+- `src/lib/mapEngine.ts` — prepínač, tenké rozhranie enginov (`createMap`, `Popup`, `NavigationControl`, `setupLayers`, `country`, `outline`) a `preloadMapData()`. `GlobalMap` a `HeroMap` sú spoločné pre oba enginy.
 - `src/lib/mapSetup.ts` — spoločný vzhľad: vrstvy krajín (`countryLayers()`, rovnaké ID a výrazy pre oba enginy), farby `MAP_PALETTE`, `fitWorld()`.
-- `src/lib/mapEngineMaplibre.ts` — štýl zostavený v kóde: žiadny podklad, oceány priehľadné, vrstvy krajín a vrstva názvov `country-label`. Dáta sa stiahnu raz na návštevu (`loadCountryData()`, spoločné pre úvodnú mapu aj mapu zápasu) a mapa sa vytvorí až potom, takže nikdy nezačne prázdna.
+- `src/lib/mapEngineMaplibre.ts` — štýl zostavený v kóde: žiadny podklad, oceány priehľadné, vrstvy krajín a vrstva názvov `country-label`. Dáta sa stiahnu raz na návštevu (`loadCountryData()`, spoločné pre úvodnú mapu aj mapu zápasu) a mapa sa vytvorí až potom, takže nikdy nezačne prázdna. Úvodná mapa kreslí hranice z druhej kópie tých istých tvarov (zdroj `country-outlines`, `outline()` v rozhraní enginu): MapLibre pri každej zmene stavu krajiny prepočíta všetky vrstvy, ktoré stav čítajú, a animácia mení výplň každú snímku, hranicu len raz. Podrobnosti v časti [Presnosť tvarov](#presnosť-tvarov).
 - `src/lib/mapAssets.ts` — **generovaný** súbor s aktuálnymi menami dátových súborov (nemeniť ručne).
 
 ## Dáta a vyrovnávacia pamäť
@@ -48,8 +48,17 @@ Všetko vyrába `node scripts/build-countries.mjs` (zdroje si raz stiahne do `sc
 - **Prečo 10m US:** 110m nemá Maltu, Singapur, Monako ani ďalšie malé štáty; 50m existuje len v pohľade „de facto“ (samostatný Somaliland, Severný Cyprus). US vydanie je len v 10m, preto sa zjednodušuje.
 - **Zjednodušenie podľa veľkosti krajiny:** tolerancia úmerná veľkosti (asi 80 m mikroštáty, 200 m Luxembursko, 900 m Slovensko, najviac 4 km Rusko či Kanada). Rovnaké percento pre všetky krajiny robilo z Malty trojuholník a mazalo Gozo.
 - **Najväčšie priblíženie: zoom 7** (Luxembursko na celej obrazovke notebooku). Ďalej by pobrežia Natural Earth pôsobili hrubo oproti Mapboxu a na fanúšikovskej mape ulice netreba. Prechod na podrobnejšie dáta pri priblížení sme neurobili: druhý zdroj by pridal ~1–2 MB a takmer nikto na mape tak ďaleko nepribližuje.
+- **180. poludník:** Natural Earth delí Rusko a Fidži na ±180°. Skript presunie ich časti tesne západne od 180° na 180–191° v. d. a spojí ich so zvyškom krajiny, takže na oboch mapách (169° z. d. – 191° v. d., `frameWorld()` v `src/lib/mapSetup.ts`) je Čukotka celá a bez čiary rezu. Podrobne: [maplibre-comparison/fidelity.md](maplibre-comparison/fidelity.md#180-poludník-čukotka-aleuty-fidži-kiribati).
 - **ISO kódy:** `ISO_A2_EH` namiesto `ISO_A2` (ten je pri Francúzsku či Nórsku `-99`), zvyšok tabuľka v skripte. Zámorské územia s vlastným kódom (Réunion, Guadeloupe, Svalbard, Karibské Holandsko…) sú samostatné ako v Mapboxe. Bez tvaru sú len `AQ` (Antarktída, zámerne) a `BV` (neobývaný Bouvetov ostrov). Kontrola: `node scripts/check-country-codes.mjs --all`, test `tests/map-data.test.ts`.
 - **Sporné hranice:** jeden pevný pohľad „US worldview“ ako pri Mapboxe (Krym = Ukrajina, Abcházsko a Južné Osetsko = Gruzínsko, Somaliland = Somálsko, Severný Cyprus = Cyprus, Kosovo a Taiwan samostatne, Západná Sahara samostatne, Golanské výšiny = Izrael, Kašmír podľa línií kontroly).
+
+## Presnosť tvarov
+
+Vykreslený obrys krajiny sa od zdrojových tvarov odchyľuje najviac o 1 pixel obrazovky pri každej veľkosti okna (390–3840 px) a hustote pixelov (DPR 1–3), na úvodnej mape aj na mape zápasu (merané 2026-11-27: 0,57–0,80 px; úplne presné vykreslenie má 0,50 px). Podrobne, s metodikou a stavom pred zmenou: [maplibre-comparison/fidelity.md](maplibre-comparison/fidelity.md).
+
+- **Zjednodušenie pri rezaní na dlaždice:** tolerancia 0,125 na pixel zariadenia (`shapeTolerance()` v `src/lib/mapEngineMaplibre.ts`; MapLibre má predvolene 0,375 bez ohľadu na DPR). Úvodná mapa mala do 27. 11. 2026 toleranciu 1,5 – na širokej obrazovke to boli zubaté pobrežia (až 7 px).
+- **Plátno do 8192 px** (`maxCanvasSize`), aby sa mapa na 5K displeji nekreslila v nižšom rozlíšení a nerozmazala.
+- **Kontrola po zmene:** `node docs/maplibre-comparison/tools/shape-fidelity.cjs http://localhost:3000 out.json` proti `npm run dev` a porovnať s tabuľkou vo `fidelity.md`.
 
 ## Popisky krajín
 
@@ -101,7 +110,8 @@ Studené načítanie stránky zápasu (prázdna cache), 5 meraní, medián; vše
 
 - MapLibre stiahne o 29 % menej než Mapbox. Pri opakovanej návšteve nesťahuje dáta mapy vôbec.
 - Čas do zobrazenia je o ~0,3–0,4 s dlhší než pri Mapboxe. MapLibre musí pred prvým vykreslením rozrezať tvary celého sveta na dlaždice, kým Mapbox dostane hotové dlaždice zo servera. Rozdiely sú menšie než rozptyl medzi meraniami. Zlepšenia v tejto práci: GeoJSON ide do workera ako text (blob URL), nie kopírovaním objektu (~100 ms na hlavnom vlákne), a predvolené zjednodušovanie MapLibre pri malom priblížení (s vypnutým bolo zobrazenie o ~20 % pomalšie).
-- Úvodná animácia: priemerne o niečo menej snímok, ale rovnomernejšie (najdlhšia snímka 133 ms oproti 350 ms pri Mapboxe). Úvodná mapa má hrubšie tvary (pevný pohľad na svet, rozdiel nie je vidieť) a hotové krajiny sa už neprekresľujú. Absolútne čísla sú nízke, lebo testovacie prostredie kreslí WebGL softvérovo; porovnávať treba len medzi sebou.
+- Úvodná animácia (stav 26. 11.): priemerne o niečo menej snímok, ale rovnomernejšie (najdlhšia snímka 133 ms oproti 350 ms pri Mapboxe). Absolútne čísla sú nízke, lebo testovacie prostredie kreslí WebGL softvérovo; porovnávať treba len medzi sebou.
+- **Od 27. 11. 2026** majú obe mapy presnejšie tvary (pozri [Presnosť tvarov](#presnosť-tvarov)) a čísla v tabuľke vyššie už neplatia pre úvodnú mapu ani čas do zobrazenia: na softvérovom WebGL je animácia pomalšia a mapa sa zobrazí o ~0,7–1 s neskôr, JavaScript na snímku animácie je však na úrovni pôvodného stavu a prenesené bajty sú rovnaké. Meranie a vysvetlenie: [maplibre-comparison/fidelity.md](maplibre-comparison/fidelity.md#plynulosť-animácie-a-načítanie).
 
 ## Známe rozdiely oproti Mapboxu
 

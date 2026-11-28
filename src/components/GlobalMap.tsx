@@ -6,7 +6,7 @@ import type { CountryResult, MatchWithTeams } from "@/lib/types";
 import { countryName, splitPercent } from "@/lib/format";
 import { getMatchColors } from "@/lib/teamColors";
 import { useTheme } from "@/lib/theme";
-import { FILL_LAYER_ID, MAP_PALETTE, applyMapPalette, fitWorld } from "@/lib/mapSetup";
+import { FILL_LAYER_ID, MAP_PALETTE, applyMapPalette, fitWorld, frameWorld } from "@/lib/mapSetup";
 import { MAP_ENGINE, isMapEngineConfigured, loadMapEngine, preloadMapData, type MapEngine } from "@/lib/mapEngine";
 import { claimMapLoad, useMapBudget } from "@/lib/mapBudget";
 import { formatResetDate } from "@/lib/mapBudgetMessage";
@@ -132,8 +132,15 @@ export function GlobalMap({
       // Reset first: a minZoom left over from a previous (bigger) size
       // would otherwise stop the map from zooming out to fit.
       map.setMinZoom(-2);
-      fitWorld(map, padding);
-      map.setMinZoom(map.getZoom() - 0.3);
+      if (engine.name === "maplibre") {
+        // 169° W – 191° E, Chukotka whole (see frameWorld). It can't zoom
+        // out further: the world would then show twice side by side.
+        frameWorld(map, padding);
+        map.setMinZoom(map.getZoom());
+      } else {
+        fitWorld(map, padding);
+        map.setMinZoom(map.getZoom() - 0.3);
+      }
     }
     const resizeObserver = new ResizeObserver(() => refit());
     resizeObserver.observe(container);
