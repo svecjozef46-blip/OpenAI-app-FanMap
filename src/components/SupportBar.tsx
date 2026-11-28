@@ -15,7 +15,8 @@ export function SupportBar({
   isEmpty: boolean;
   height?: number;
 }) {
-  const awayPct = 100 - homePct;
+  // Rounded to 2 decimals: 100 - 50.3 must not become 49.699999999999996.
+  const awayPct = Math.round((100 - homePct) * 100) / 100;
   // A 2px gap between the halves, except when one side is 0% (then the
   // other side should fill the whole bar, with no sliver of the other color).
   const showGap = homePct > 0 && awayPct > 0;

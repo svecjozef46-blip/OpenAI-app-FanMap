@@ -37,7 +37,7 @@ export function MatchHeader({
 
   const homeVotes = results.reduce((sum, r) => sum + r.homeVotes, 0);
   const awayVotes = results.reduce((sum, r) => sum + r.awayVotes, 0);
-  const { homePct, awayPct, isEmpty } = splitPercent(homeVotes, awayVotes);
+  const { homePct, homeText, awayText, isEmpty } = splitPercent(homeVotes, awayVotes);
 
   const supportedTeam =
     myVoteTeamId === match.home_team_id
@@ -50,7 +50,7 @@ export function MatchHeader({
   const isClosed = forceClosed || isVotingClosed(match.status);
   const message = isClosed
     ? {
-        text: isEmpty ? "Voting closed · no votes" : `Voting closed · final ${homePct}% · ${awayPct}%`,
+        text: isEmpty ? "Voting closed · no votes" : `Voting closed · final ${homeText}% · ${awayText}%`,
         short: "Voting closed",
         good: supportedTeam !== null,
       }
@@ -80,8 +80,8 @@ export function MatchHeader({
               white kit would be unreadable as text in one of the modes. The
               bar below carries the colors. */}
           <div className={`flex justify-between text-[11px] font-semibold tabular-nums ${isEmpty ? "text-muted" : ""}`}>
-            <span>{homePct}%</span>
-            <span>{awayPct}%</span>
+            <span>{homeText}%</span>
+            <span>{awayText}%</span>
           </div>
           <SupportBar homePct={homePct} homeColor={colors.home} awayColor={colors.away} isEmpty={isEmpty} height={5} />
           <p className={`truncate text-center text-[11px] leading-4 ${message.good ? "text-accent" : "text-muted"}`}>
@@ -108,8 +108,10 @@ function TeamLabel({ team, side, isMine }: { team: Team; side: "home" | "away"; 
       <span className="shrink-0">
         <TeamBadge team={team} size={32} />
       </span>
-      {/* Short name on phones, full name from the sm breakpoint up. */}
-      <span className="min-w-0 truncate text-sm font-semibold sm:hidden">{team.short_name}</span>
+      {/* Phones: the initials badge already shows the short name, so text is
+          only added next to a real crest. From the sm breakpoint up: the
+          full name. */}
+      {team.logo_url && <span className="min-w-0 truncate text-sm font-semibold sm:hidden">{team.short_name}</span>}
       <span className="hidden min-w-0 truncate text-[15px] font-semibold tracking-tight sm:block">{team.name}</span>
       {isMine && <CheckIcon />}
     </div>

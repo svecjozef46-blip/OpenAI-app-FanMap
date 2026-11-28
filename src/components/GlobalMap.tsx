@@ -194,12 +194,12 @@ export function GlobalMap({
       const m = matchRef.current;
       const colors = getMatchColors(m, themeRef.current);
       const r = resultsRef.current.find((x) => x.countryCode === code);
-      const { homePct, awayPct, total } = splitPercent(r?.homeVotes ?? 0, r?.awayVotes ?? 0);
+      const { homeText, awayText, total } = splitPercent(r?.homeVotes ?? 0, r?.awayVotes ?? 0);
       const body =
         total === 0
           ? `<div class="fanmap-popup__muted">No votes yet</div>`
-          : `<div class="fanmap-popup__row"><span class="fanmap-popup__dot" style="background:${colors.home}"></span>${m.home_team.short_name}<b>${homePct}%</b></div>
-             <div class="fanmap-popup__row"><span class="fanmap-popup__dot" style="background:${colors.away}"></span>${m.away_team.short_name}<b>${awayPct}%</b></div>
+          : `<div class="fanmap-popup__row"><span class="fanmap-popup__dot" style="background:${colors.home}"></span>${m.home_team.short_name}<b>${homeText}%</b></div>
+             <div class="fanmap-popup__row"><span class="fanmap-popup__dot" style="background:${colors.away}"></span>${m.away_team.short_name}<b>${awayText}%</b></div>
              <div class="fanmap-popup__muted">${total.toLocaleString("en-US")} vote${total === 1 ? "" : "s"}</div>`;
       popup
         .setLngLat(e.lngLat)
