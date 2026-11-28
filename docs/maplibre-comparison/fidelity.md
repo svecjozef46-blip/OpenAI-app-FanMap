@@ -292,18 +292,18 @@ Skontrolované na snímkach aj meraním (Rusko, USA, Fidži a Kiribati sú medzi
 
 ## Orezanie pohľadu
 
-Úvodná mapa nie je väčšia než okno; orezanie robí pohľad. Svet presne vyplní šírku okna (zoom = log₂(šírka / 512)), takže výška sa odreže. **Teraz** (po dvoch pripomienkach majiteľa 28. 11.: najprv „trošku dole“, potom „príliš dole, radšej trošku hore“) je pod Ohňovou zemou pás oceánu vo výške 4 % mapy (na počítači; 12 px + 4 % výšky od spodného okraja). Na telefóne je Ohňová zem nad popisom zápasu ako predtým. Keby sa sever zmestil celý, mapa sa vycentruje.
+Úvodná mapa nie je väčšia než okno; orezanie robí pohľad. Svet presne vyplní šírku okna (zoom = log₂(šírka / 512)), takže výška sa odreže. **Teraz** (po pripomienkach majiteľa 28. 11.: najprv „trošku dole“, potom „príliš dole, radšej trošku hore“ a „trošku vyššie predsa len“) je pod Ohňovou zemou pás oceánu vo výške 7 % mapy (na počítači; 12 px + 7 % výšky od spodného okraja). Na telefóne je Ohňová zem nad popisom zápasu ako predtým. Keby sa sever zmestil celý, mapa sa vycentruje.
 
 | Okno | Sever: produkcia → teraz | Juh: produkcia → teraz |
 |---|---|---|
-| 1280 × 720 | 75,7° → 73,4° | 57° → 61,7° j. š. |
-| 1440 × 900 | 78,4° → 78,9° | 63° → 61,9° |
-| 1680 × 1050 | 78,6° → 79,3° | 63,4° → 61,7° |
-| 1920 × 1080 | 76,3° → 74,9° | 58,3° → 61,2° |
-| 2560 × 1440 | 76,5° → 75,5° | 58,9° → 61° |
+| 1280 × 720 | 75,7° → 71,7° | 57° → 64,2° j. š. |
+| 1440 × 900 | 78,4° → 77,6° | 63° → 64,8° |
+| 1680 × 1050 | 78,6° → 78,0° | 63,4° → 64,6° |
+| 1920 × 1080 | 76,3° → 73,3° | 58,3° → 63,8° |
+| 2560 × 1440 | 76,5° → 74,0° | 58,9° → 63,7° |
 | telefón 390 × 844 | 76,8° → 76,7° | (nad popisom zápasu) |
 
-Produkcia rámovala nerovnomerne (pri 1280 a 1920 mapa sedela pri spodnom okraji, pri 1440 a 1680 s pásom oceánu); teraz je pás pod Ohňovou zemou pri všetkých veľkostiach rovnaký podiel výšky (40–69 px). Stále mimo pohľadu: severný cíp Grónska (83,6°) a Ellesmere (83,1°). Ohňová zem a Nový Zéland sú celé všade; mapa neprekrýva nadpis, tlačidlá ani popis zápasu.
+Produkcia rámovala nerovnomerne (pri 1280 a 1920 mapa sedela pri spodnom okraji, pri 1440 a 1680 s pásom oceánu); teraz je pás pod Ohňovou zemou pri všetkých veľkostiach rovnaký podiel výšky (60–110 px). Stále mimo pohľadu: severný cíp Grónska (83,6°) a Ellesmere (83,1°). Ohňová zem a Nový Zéland sú celé všade; mapa neprekrýva nadpis, tlačidlá ani popis zápasu.
 
 ## Plynulosť animácie a načítanie
 
