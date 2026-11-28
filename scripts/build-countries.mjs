@@ -219,6 +219,47 @@ const shaped = await mapshaper.applyCommands(
 );
 const countries = JSON.parse(shaped["countries.geojson"]);
 
+// --- 2b. Countries cut by the 180° meridian ----------------------------------
+// Natural Earth splits them there, so each half has an edge along 180°, which
+// the map draws as a border line wherever both halves are on screen. The
+// home-page map shows the world from 169° W to 191° E so that Chukotka stays
+// whole (see lib/mapEngineMaplibre.ts): the parts just west of 180°
+// (Chukotka's tip, the east of Wrangel Island, Fiji's eastern islands) move
+// to 180–191° E and are merged with the rest, without that edge. The match
+// map, which shows exactly −180° to 180°, still draws them at its left edge:
+// MapLibre repeats what lies past 180° there. Done after simplifying, which
+// needs longitudes within ±180 (mapshaper would treat the data as flat x/y).
+const ACROSS_180 = { RU: -160, FJ: -170 }; // code → parts entirely west of this longitude move
+// Areas and label points below are computed from the shapes as they were
+// (mapshaper only measures in km² within ±180°).
+const countriesWithin180 = structuredClone(countries);
+{
+  const moved = countries.features.filter((f) => ACROSS_180[f.properties.code] !== undefined);
+  for (const f of moved) {
+    const limit = ACROSS_180[f.properties.code];
+    f.geometry = {
+      type: "MultiPolygon",
+      coordinates: polygonsOf(f.geometry).map((polygon) =>
+        Math.max(...polygon[0].map(([x]) => x)) < limit ? polygon.map((ring) => ring.map(([x, y]) => [x + 360, y])) : polygon
+      ),
+    };
+  }
+  const merged = await mapshaper.applyCommands(
+    `-i moved.json -dissolve2 code -o merged.json format=geojson precision=${PRECISION}`,
+    { "moved.json": JSON.stringify({ type: "FeatureCollection", features: moved }) }
+  );
+  const byCode = new Map(JSON.parse(merged["merged.json"]).features.map((f) => [f.properties.code, f]));
+  countries.features = countries.features.map((f) => byCode.get(f.properties.code) ?? f);
+  // What's left exactly on 180° must be where a coast crosses it, not an edge along it.
+  for (const f of byCode.values()) {
+    let along = 0;
+    for (const polygon of polygonsOf(f.geometry))
+      for (const ring of polygon)
+        for (let i = 1; i < ring.length; i++) if (ring[i - 1][0] === 180 && ring[i][0] === 180) along += Math.abs(ring[i][1] - ring[i - 1][1]);
+    console.log(`${f.properties.code}: joined across 180°, edges left along it: ${(along * 111).toFixed(1)} km`);
+  }
+}
+
 // --- 3. Label points --------------------------------------------------------
 // Where: Natural Earth's hand-placed LABEL_X/LABEL_Y where it has them (not
 // the centre of the shape: Italy, Norway or Chile have theirs where the
@@ -260,7 +301,7 @@ function minzoomForArea(km2) {
 const innerPoints = JSON.parse(
   (
     await mapshaper.applyCommands("-i c.json -each 'km2 = this.area / 1e6' -points inner -o p.json format=geojson precision=0.001", {
-      "c.json": JSON.stringify(countries),
+      "c.json": JSON.stringify(countriesWithin180),
     })
   )["p.json"]
 );

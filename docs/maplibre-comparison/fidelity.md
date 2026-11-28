@@ -8,7 +8,7 @@ Merané nástrojom `tools/shape-fidelity.cjs`: o koľko pixelov sa vykreslený o
 |---|---|---|
 | **Pred** (`main`: tolerancia 1,5, plátno najviac 4096 px) | 2,7–7,5 px, neprejde ani jedna zo 14 | 0,9–2,4 px (rovnaké ako #6) |
 | **PR #6** (predvolená tolerancia 0,375) | 1,0–6,6 px, prejdú 2 zo 14 | 0,9–2,4 px, prejdú 3 zo 14 |
-| **Teraz** (0,125 / DPR, plátno do 8192 px) | **0,57–0,80 px, prejde všetkých 14** | **0,57–0,80 px, prejde všetkých 14** |
+| **Teraz** (0,125 / DPR, plátno do 8192 px) | **0,57–0,86 px, prejde všetkých 14** | **0,57–0,80 px, prejde všetkých 14** |
 
 (14 = šesť veľkostí okna od 1280 × 720 po 3840 × 2160 pri DPR 1 a 2, plus telefón 390 × 844 pri DPR 2 a 3. Rozsah = najhoršia krajina pri najlepšej a najhoršej veľkosti okna. Úplne presné vykreslenie má 0,50 px, pozri metodiku.)
 
@@ -35,20 +35,20 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 
 | Okno | DPR | Zoom | Pred (main): max (krajina) | Pred (main): p99 | Pred (main) | PR #6: max (krajina) | PR #6: p99 | PR #6 | Teraz: max (krajina) | Teraz: p99 | Teraz |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1280×720 | 1 | 1.32 | 2.79 (CA) | 1.64 | ❌ | 1.02 (ID) | 0.65 | ❌ | 0.67 (CL) | 0.51 | ✅ |
-| 1280×720 | 2 | 1.32 | 5.41 (CA) | 3.28 | ❌ | 1.65 (US) | 1.00 | ❌ | 0.66 (CA) | 0.53 | ✅ |
-| 1440×900 | 1 | 1.49 | 3.32 (CA) | 1.89 | ❌ | 1.11 (RU) | 0.68 | ❌ | 0.69 (JP) | 0.56 | ✅ |
-| 1440×900 | 2 | 1.49 | 5.63 (CA) | 3.61 | ❌ | 1.72 (CA) | 1.14 | ❌ | 0.68 (RU) | 0.53 | ✅ |
-| 1680×1050 | 1 | 1.71 | 3.56 (CA) | 2.14 | ❌ | 1.17 (RU) | 0.77 | ❌ | 0.69 (GB) | 0.61 | ✅ |
-| 1680×1050 | 2 | 1.71 | 7.04 (CA) | 4.20 | ❌ | 2.02 (CA) | 1.23 | ❌ | 0.72 (CA) | 0.57 | ✅ |
-| 1920×1080 | 1 | 1.91 | 3.88 (CA) | 2.40 | ❌ | 1.27 (BR) | 0.85 | ❌ | 0.80 (RU) | 0.57 | ✅ |
-| 1920×1080 | 2 | 1.91 | 7.52 (CA) | 4.83 | ❌ | 6.58 (CA) | 1.37 | ❌ | 0.77 (RU) | 0.63 | ✅ |
-| 2560×1440 | 1 | 2.32 | 2.74 (BR) | 1.79 | ❌ | 0.98 (RU) | 0.69 | ✅ | 0.63 (ID) | 0.52 | ✅ |
-| 2560×1440 | 2 | 2.32 | 4.65 (BR) (drawn at DPR 1.6) | 3.09 | ❌ | 1.54 (CA) (drawn at DPR 1.6) | 0.92 | ❌ | 0.62 (GR) | 0.53 | ✅ |
-| 3840×2160 | 1 | 2.91 | 4.39 (RU) | 3.20 | ❌ | 1.42 (ID) | 0.85 | ❌ | 0.73 (AU) | 0.54 | ✅ |
-| 3840×2160 | 2 | 2.91 | 4.52 (BR) (drawn at DPR 1.07) | 3.58 | ❌ | 1.80 (ID) (drawn at DPR 1.07) | 1.22 | ❌ | 0.78 (BR) | 0.54 | ✅ |
-| 390×844 | 2 | -0.39 | 2.87 (CA) | 1.89 | ❌ | 1.00 (BR) | 0.75 | ✅ | 0.57 (RU) | 0.51 | ✅ |
-| 390×844 | 3 | -0.39 | 4.21 (CA) | 2.77 | ❌ | 1.30 (RU) | 1.15 | ❌ | 0.60 (RU) | 0.52 | ✅ |
+| 1280×720 | 1 | 1.32 | 2.79 (CA) | 1.64 | ❌ | 1.02 (ID) | 0.65 | ❌ | 0.62 (ID) | 0.55 | ✅ |
+| 1280×720 | 2 | 1.32 | 5.41 (CA) | 3.28 | ❌ | 1.65 (US) | 1.00 | ❌ | 0.66 (RU) | 0.53 | ✅ |
+| 1440×900 | 1 | 1.49 | 3.32 (CA) | 1.89 | ❌ | 1.11 (RU) | 0.68 | ❌ | 0.70 (RU) | 0.58 | ✅ |
+| 1440×900 | 2 | 1.49 | 5.63 (CA) | 3.61 | ❌ | 1.72 (CA) | 1.14 | ❌ | 0.68 (ID) | 0.58 | ✅ |
+| 1680×1050 | 1 | 1.71 | 3.56 (CA) | 2.14 | ❌ | 1.17 (RU) | 0.77 | ❌ | 0.71 (GB) | 0.53 | ✅ |
+| 1680×1050 | 2 | 1.71 | 7.04 (CA) | 4.20 | ❌ | 2.02 (CA) | 1.23 | ❌ | 0.71 (CA) | 0.58 | ✅ |
+| 1920×1080 | 1 | 1.91 | 3.88 (CA) | 2.40 | ❌ | 1.27 (BR) | 0.85 | ❌ | 0.78 (RU) | 0.56 | ✅ |
+| 1920×1080 | 2 | 1.91 | 7.52 (CA) | 4.83 | ❌ | 6.58 (CA) | 1.37 | ❌ | 0.86 (BR) | 0.58 | ✅ |
+| 2560×1440 | 1 | 2.32 | 2.74 (BR) | 1.79 | ❌ | 0.98 (RU) | 0.69 | ✅ | 0.61 (RU) | 0.52 | ✅ |
+| 2560×1440 | 2 | 2.32 | 4.65 (BR) (drawn at DPR 1.6) | 3.09 | ❌ | 1.54 (CA) (drawn at DPR 1.6) | 0.92 | ❌ | 0.64 (IT) | 0.55 | ✅ |
+| 3840×2160 | 1 | 2.91 | 4.39 (RU) | 3.20 | ❌ | 1.42 (ID) | 0.85 | ❌ | 0.78 (ID) | 0.53 | ✅ |
+| 3840×2160 | 2 | 2.91 | 4.52 (BR) (drawn at DPR 1.07) | 3.58 | ❌ | 1.80 (ID) (drawn at DPR 1.07) | 1.22 | ❌ | 0.83 (IT) | 0.60 | ✅ |
+| 390×844 | 2 | -0.39 | 2.87 (CA) | 1.89 | ❌ | 1.00 (BR) | 0.75 | ✅ | 0.61 (JP) | 0.54 | ✅ |
+| 390×844 | 3 | -0.39 | 4.21 (CA) | 2.77 | ❌ | 1.30 (RU) | 1.15 | ❌ | 0.57 (AU) | 0.52 | ✅ |
 
 ### Mapa zápasu
 
@@ -56,18 +56,18 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1280×720 | 1 | 0.91 | – | – | – | 1.24 (US) | 0.89 | ❌ | 0.68 (CA) | 0.56 | ✅ |
 | 1280×720 | 2 | 0.91 | – | – | – | 2.35 (US) | 1.52 | ❌ | 0.80 (RU) | 0.59 | ✅ |
-| 1440×900 | 1 | 1.13 | – | – | – | 0.88 (RU) | 0.66 | ✅ | 0.63 (RU) | 0.50 | ✅ |
+| 1440×900 | 1 | 1.13 | – | – | – | 0.88 (RU) | 0.66 | ✅ | 0.64 (CL) | 0.51 | ✅ |
 | 1440×900 | 2 | 1.13 | – | – | – | 1.52 (ID) | 0.90 | ❌ | 0.64 (ID) | 0.52 | ✅ |
 | 1680×1050 | 1 | 1.41 | – | – | – | 0.96 (CL) | 0.68 | ✅ | 0.65 (RU) | 0.53 | ✅ |
 | 1680×1050 | 2 | 1.41 | – | – | – | 1.64 (US) | 1.03 | ❌ | 0.68 (CL) | 0.52 | ✅ |
 | 1920×1080 | 1 | 1.64 | – | – | – | 1.12 (CA) | 0.74 | ❌ | 0.74 (CA) | 0.53 | ✅ |
-| 1920×1080 | 2 | 1.64 | – | – | – | 2.02 (ID) | 1.19 | ❌ | 0.70 (BR) | 0.62 | ✅ |
+| 1920×1080 | 2 | 1.64 | – | – | – | 2.02 (ID) | 1.19 | ❌ | 0.70 (ID) | 0.62 | ✅ |
 | 2560×1440 | 1 | 2.13 | – | – | – | 1.02 (CA) | 0.66 | ❌ | 0.62 (AU) | 0.58 | ✅ |
-| 2560×1440 | 2 | 2.13 | – | – | – | 1.61 (ID) (drawn at DPR 1.83) | 1.08 | ❌ | 0.63 (CL) | 0.53 | ✅ |
+| 2560×1440 | 2 | 2.13 | – | – | – | 1.61 (ID) (drawn at DPR 1.83) | 1.08 | ❌ | 0.63 (CL) | 0.52 | ✅ |
 | 3840×2160 | 1 | 2.78 | – | – | – | 1.31 (US) | 0.79 | ❌ | 0.77 (CL) | 0.53 | ✅ |
-| 3840×2160 | 2 | 2.78 | – | – | – | 1.59 (US) (drawn at DPR 1.16) | 1.03 | ❌ | 0.69 (GB) | 0.58 | ✅ |
+| 3840×2160 | 2 | 2.78 | – | – | – | 1.59 (US) (drawn at DPR 1.16) | 1.03 | ❌ | 0.69 (CL) | 0.58 | ✅ |
 | 390×844 | 2 | -0.39 | – | – | – | 1.00 (BR) | 0.75 | ✅ | 0.57 (RU) | 0.51 | ✅ |
-| 390×844 | 3 | -0.39 | – | – | – | 1.30 (RU) | 1.15 | ❌ | 0.60 (RU) | 0.52 | ✅ |
+| 390×844 | 3 | -0.39 | – | – | – | 1.30 (RU) | 1.15 | ❌ | 0.60 (RU) | 0.53 | ✅ |
 
 Úvodná mapa a mapa zápasu majú teraz rovnaké nastavenie tvarov (líšia sa len tým, že úvodná mapa nemá dlaždice nad zoom 3, kam sa nikdy nedostane), takže pri rovnakom zoome je tvar rovnaký. Na telefóne (390 × 844) sú obe mapy na rovnakom zoome (−0,39) a namerané hodnoty sú zhodné do pixela.
 
@@ -192,47 +192,47 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 
 | Krajina | obrys max | obrys p99 | presné vykreslenie max | pixely voči presnému p99 (mapa→presné / presné→mapa) | najhoršie miesto (dĺžka, šírka) |
 |---|---|---|---|---|---|
-| CA | 0.65 | 0.49 | 0.50 | 1.00 / 1.00 | -94.18, 48.82 |
-| RU | 0.64 | 0.50 | 0.50 | 1.00 / 1.00 | 155.68, 53.9 |
-| AU | 0.67 | 0.53 | 0.50 | 1.00 / 1.00 | 152.68, -25.51 |
-| ID | 0.60 | 0.51 | 0.50 | 1.00 / 1.00 | 114.96, -7.95 |
-| NO | 0.64 | 0.50 | 0.50 | 1.00 / 1.00 | 6.75, 61.02 |
-| GB | 0.69 | 0.52 | 0.48 | 1.00 / 1.00 | -4.39, 53.39 |
-| IT | 0.60 | 0.52 | 0.50 | 1.00 / 1.00 | 14.04, 42.7 |
-| US | 0.65 | 0.49 | 0.50 | 1.00 / 1.00 | -94.18, 48.82 |
-| BR | 0.66 | 0.52 | 0.50 | 1.00 / 1.00 | -57.32, -21.98 |
-| CL | 0.65 | 0.53 | 0.49 | 1.00 / 1.00 | -73.39, -36.85 |
-| GR | 0.58 | 0.49 | 0.48 | 1.00 / 1.00 | 23.89, 35.22 |
-| JP | 0.59 | 0.50 | 0.49 | 1.00 / 1.00 | 139.82, 39.64 |
-| NZ | 0.59 | 0.53 | 0.49 | 1.00 / 1.00 | 176.25, -37.7 |
-| SK | 0.61 | 0.61 | 0.48 | 1.00 / 1.00 | 22.39, 48.82 |
-| MT | 0.26 | 0.26 | 0.26 | – / – | 14.46, 36.09 |
+| CA | 0.61 | 0.49 | 0.50 | 1.00 / 1.00 | -56.39, 53.75 |
+| RU | 0.61 | 0.50 | 0.50 | 1.00 / 1.00 | 142.68, 48.8 |
+| AU | 0.64 | 0.52 | 0.48 | 1.00 / 1.00 | 142.89, -38.4 |
+| ID | 0.62 | 0.53 | 0.50 | 1.00 / 1.00 | 108.82, 1.42 |
+| NO | 0.64 | 0.49 | 0.49 | 1.00 / 1.00 | 12.39, 60.8 |
+| GB | 0.71 | 0.50 | 0.49 | 1.00 / 1.00 | -3.46, 58.75 |
+| IT | 0.59 | 0.52 | 0.49 | 1.00 / 1.00 | 12.82, 43.93 |
+| US | 0.65 | 0.51 | 0.50 | 1.00 / 1.00 | -159.68, 56.57 |
+| BR | 0.63 | 0.52 | 0.49 | 1.00 / 1.00 | -57.89, -21.62 |
+| CL | 0.63 | 0.52 | 0.50 | 1.00 / 1.00 | -70.32, -34.97 |
+| GR | 0.58 | 0.52 | 0.49 | 1.00 / 1.41 | 21.61, 37.09 |
+| JP | 0.55 | 0.50 | 0.49 | 1.00 / 1.00 | 134.11, 35.71 |
+| NZ | 0.56 | 0.53 | 0.49 | 1.00 / 1.00 | 183.61, -43.57 |
+| SK | 0.52 | 0.52 | 0.49 | 1.00 / 1.00 | 22.04, 48.38 |
+| MT | 0.39 | 0.39 | 0.39 | – / – | 14.54, 35.89 |
 | SG | (menšia než pixel) | | | | |
-| FJ | 0.47 | 0.47 | 0.48 | 1.00 / 1.00 | 177.54, -18.16 |
-| KI | 0.38 | 0.38 | 0.38 | – / – | -159.32, 3.81 |
+| FJ | 0.47 | 0.47 | 0.45 | 1.00 / 1.00 | 178.04, -17.38 |
+| KI | (menšia než pixel) | | | | |
 
 #### Teraz: hero 2560x1440 @ DPR 2
 
 | Krajina | obrys max | obrys p99 | presné vykreslenie max | pixely voči presnému p99 (mapa→presné / presné→mapa) | najhoršie miesto (dĺžka, šírka) |
 |---|---|---|---|---|---|
-| CA | 0.61 | 0.50 | 0.50 | 1.00 / 1.00 | -110.43, 67.98 |
-| RU | 0.59 | 0.50 | 0.50 | 1.00 / 1.00 | 34.7, 65.62 |
-| AU | 0.56 | 0.50 | 0.50 | 1.00 / 1.00 | 150.15, -35.81 |
-| ID | 0.59 | 0.51 | 0.50 | 1.00 / 1.00 | 110.85, -8.21 |
-| NO | 0.56 | 0.49 | 0.50 | 1.00 / 1.00 | 16.56, 68.4 |
-| GB | 0.58 | 0.50 | 0.50 | 1.00 / 1.00 | -6.71, 54.16 |
-| IT | 0.59 | 0.51 | 0.50 | 1.00 / 1.00 | 16.42, 41.34 |
-| US | 0.58 | 0.49 | 0.50 | 1.00 / 1.00 | -152.19, 70.59 |
-| BR | 0.61 | 0.50 | 0.50 | 1.00 / 1.00 | -51.08, 3.71 |
-| CL | 0.59 | 0.51 | 0.50 | 1.00 / 1.00 | -71.61, -31.36 |
-| GR | 0.62 | 0.51 | 0.50 | 1.00 / 1.00 | 20.36, 38.21 |
-| JP | 0.55 | 0.48 | 0.50 | 1.00 / 1.00 | 140.38, 41.24 |
-| NZ | 0.60 | 0.52 | 0.49 | 1.00 / 1.00 | 177.86, -38.89 |
-| SK | 0.55 | 0.53 | 0.49 | 1.00 / 1.00 | 16.91, 48.31 |
-| MT | 0.42 | 0.42 | 0.42 | 0.00 / 1.00 | 14.45, 35.91 |
-| SG | 0.51 | 0.51 | 0.43 | 1.00 / 0.00 | 103.96, 1.47 |
-| FJ | 0.61 | 0.51 | 0.49 | 1.00 / 1.00 | 177.22, -18.06 |
-| KI | 0.48 | 0.48 | 0.48 | – / 1.00 | 176.8, -2.54 |
+| CA | 0.59 | 0.50 | 0.50 | 1.00 / 1.00 | -93.52, 48.59 |
+| RU | 0.58 | 0.50 | 0.50 | 1.00 / 1.00 | 27.56, 58.03 |
+| AU | 0.58 | 0.51 | 0.50 | 1.00 / 1.00 | 122.13, -17.72 |
+| ID | 0.58 | 0.50 | 0.50 | 1.00 / 1.00 | 106.87, -7.44 |
+| NO | 0.56 | 0.49 | 0.50 | 1.00 / 1.00 | 29.18, 69.13 |
+| GB | 0.60 | 0.50 | 0.50 | 1.00 / 1.00 | -5.49, 56.55 |
+| IT | 0.64 | 0.49 | 0.50 | 1.00 / 1.00 | 8.36, 46.36 |
+| US | 0.59 | 0.50 | 0.50 | 1.00 / 1.00 | -93.52, 48.59 |
+| BR | 0.59 | 0.50 | 0.50 | 1.00 / 1.00 | -60.05, 2.94 |
+| CL | 0.57 | 0.51 | 0.50 | 1.00 / 1.00 | -70.32, -22.34 |
+| GR | 0.57 | 0.51 | 0.50 | 1.00 / 1.00 | 24.96, 34.93 |
+| JP | 0.64 | 0.51 | 0.50 | 1.00 / 1.00 | 129.23, 34.24 |
+| NZ | 0.58 | 0.51 | 0.50 | 1.00 / 1.00 | 178.66, -49.71 |
+| SK | 0.51 | 0.49 | 0.49 | 1.00 / 1.00 | 22.14, 48.5 |
+| MT | 0.54 | 0.54 | 0.45 | 0.00 / 1.00 | 14.41, 35.96 |
+| SG | 0.30 | 0.30 | 0.30 | 0.00 / 0.00 | 103.92, 1.32 |
+| FJ | 0.60 | 0.46 | 0.47 | 1.00 / 1.00 | 177.68, -18.12 |
+| KI | 0.55 | 0.55 | 0.48 | 1.00 / 1.00 | 169.45, -0.86 |
 
 #### Teraz: match 1680x1050 @ DPR 2
 
@@ -241,20 +241,20 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 | CA | 0.67 | 0.50 | 0.50 | 1.00 / 1.00 | -91.65, 73.1 |
 | RU | 0.64 | 0.50 | 0.50 | 1.00 / 1.00 | 39.24, 47.83 |
 | AU | 0.57 | 0.51 | 0.50 | 1.00 / 1.00 | 151.61, -24.07 |
-| ID | 0.67 | 0.50 | 0.49 | 1.00 / 1.00 | 111.64, 1 |
+| ID | 0.67 | 0.50 | 0.50 | 1.00 / 1.00 | 111.64, 1 |
 | NO | 0.59 | 0.49 | 0.50 | 1.00 / 1.00 | 16.74, 67.83 |
-| GB | 0.60 | 0.50 | 0.50 | 1.00 / 1.00 | -6.29, 57.49 |
+| GB | 0.61 | 0.50 | 0.50 | 1.00 / 1.00 | -6.29, 57.49 |
 | IT | 0.60 | 0.52 | 0.49 | 1.00 / 1.00 | 8.27, 39.32 |
 | US | 0.61 | 0.50 | 0.50 | 1.00 / 1.00 | -82.39, 43.39 |
-| BR | 0.63 | 0.52 | 0.50 | 1.00 / 1.00 | -40.96, -21.01 |
+| BR | 0.61 | 0.52 | 0.50 | 1.00 / 1.00 | -55.52, -23.46 |
 | CL | 0.68 | 0.52 | 0.50 | 1.00 / 1.00 | -71.67, -32 |
 | GR | 0.56 | 0.50 | 0.50 | 1.00 / 1.00 | 22.83, 41.33 |
 | JP | 0.59 | 0.52 | 0.50 | 1.00 / 1.00 | 139.7, 39.01 |
-| NZ | 0.55 | 0.51 | 0.50 | 1.00 / 1.00 | 167.89, -44.33 |
+| NZ | 0.56 | 0.51 | 0.49 | 1.00 / 1.00 | 167.89, -44.33 |
 | SK | 0.52 | 0.50 | 0.48 | 1.00 / 1.00 | 18.6, 49.58 |
 | MT | 0.48 | 0.48 | 0.48 | – / – | 14.23, 36.18 |
 | SG | 0.43 | 0.43 | 0.50 | – / – | 103.83, 1.4 |
-| FJ | 0.50 | 0.46 | 0.45 | 1.00 / 1.00 | 179.67, -16.76 |
+| FJ | 0.50 | 0.46 | 0.49 | 1.00 / 1.00 | 179.67, -16.76 |
 | KI | 0.24 | 0.24 | 0.46 | – / – | -157.3, 1.93 |
 
 </details>
@@ -279,33 +279,30 @@ Surové výsledky: `fidelity/*.json` (pred = `before*.json`, PR #6 = `pr6*.json`
 
 ## 180. poludník (Čukotka, Aleuty, Fidži, Kiribati)
 
-Skontrolované na snímkach aj meraním (Rusko, USA, Fidži a Kiribati sú medzi meranými krajinami; prvé meranie ukázalo pri Rusku chybu 4,2 px na −180°, bola to chyba nástroja – úsečka rezu na −180° ležala o 10⁻¹⁰ px mimo mriežky hľadania, opravené).
+Skontrolované na snímkach aj meraním (Rusko, USA, Fidži a Kiribati sú medzi meranými krajinami).
 
-- **Nič nie je odrezané ani zdvojené.** Zdrojové dáta delia tvary na ±180° (štandard GeoJSON), mapa ukazuje presne jeden svet (−180° až 180°).
-- **Čukotka** je preto rozdelená: väčšina pri pravom okraji, mys Dežnev (−169,7°) pri ľavom okraji vedľa Aljašky. **Wrangelov ostrov** a **Fidži** ležia na poludníku a majú časť pri každom okraji. **Aleuty** západne od 180° (Attu, 172,9° v. d.) sú pri pravom okraji. **Kiribati** (Tarawa 173° v. d., Kiritimati −157,4°) sú obe na mape.
-- `fitWorld()` v `src/lib/mapSetup.ts` mieri na rámec −168° až 190° („Čukotka ostane pri Rusku“), no MapLibre s `renderWorldCopies: false` za 180° nič nekreslí a pohľad obmedzí na jeden svet. Komentár v kóde tak opisuje zámer, nie skutočnosť. Nemenil som to (zmena rozloženia).
+**Pôvodne:** zdrojové dáta delili Rusko a Fidži na ±180° (štandard GeoJSON) a obe mapy ukazovali presne jeden svet (−180° až 180°). Nič nebolo odrezané ani zdvojené, ale Čukotka bola rozdelená – mys Dežnev (169,7° z. d.) pri ľavom okraji vedľa Aljašky. `fitWorld()` mieril na rámec −168° až 190° („Čukotka ostane pri Rusku“), no MapLibre bez kópií sveta za 180° nič nekreslí.
 
-## Orezanie pohľadu (len popis, nič sa nemenilo)
+**Teraz (2026-11-28, na želanie majiteľa: Čukotka celá):**
 
-Úvodná mapa nie je väčšia než okno (plátno končí na okrajoch okna, len 1 px dole), orezanie robí samotný pohľad: MapLibre neukáže nič za ±180°, takže svet musí presne vyplniť šírku okna (zoom = log₂(šírka / 512)) a výška sa odreže.
+- **Úvodná mapa** ukazuje svet od **169° z. d. po 191° v. d.** (`frameHeroWorld()` v `src/lib/mapSetup.ts`, `renderWorldCopies` zapnuté len pre ňu). Ľavý okraj vedie Beringovým prielivom medzi západným cípom Aljašky (168,1° z. d.) a mysom Dežnev, takže **Aljaška aj Čukotka sú celé** (mys Dežnev 1–5 px od pravého okraja). Pohľad je presne jeden svet široký, takže sa nič nezdvojí. Ostrov sv. Vavrinca (USA, v prielive) sa delí medzi okraje.
+- **Dáta:** `scripts/build-countries.mjs` presunie časti Ruska a Fidži tesne západne od 180° (koniec Čukotky, východ Wrangelovho ostrova, východné ostrovy Fidži) na 180–191° v. d. a spojí ich so zvyškom krajiny. Bez toho by sa rez na 180° kreslil ako hranica cez Čukotku. Na poludníku ostalo 0,2 km (Rusko) a 0,4 km (Fidži) pobrežia – menej než pixel. Kontroluje to test v `tests/map-data.test.ts` (na pôvodných dátach by zlyhal: 990 km rezu).
+- **Mapa zápasu** sa nemení: ukazuje −180° až 180° bez kópií; MapLibre časť za 180° zopakuje pri ľavom okraji, takže mys Dežnev je tam ako predtým (overené snímkou aj meraním).
+- Zjednodušenie tvarov, plochy a body popiskov sa počítajú z tvarov pred presunom (mapshaper meria v km² len v rozsahu ±180°). Súbor popiskov vyšiel bajt po bajte rovnaký. Tvary krajín: 894 KB / brotli 308 KB ako predtým; ostatné krajiny sa posunuli najviac o 80 m (jeden krok mriežky TopoJSON, ktorá je teraz o 10° širšia) – pri najväčšom priblížení na DPR 2 je to 0,26 px.
 
-| Okno | Viditeľné na severe po | na juhu po | Mimo pohľadu |
-|---|---|---|---|
-| 1280 × 720 | 75,7° s. š. | 57° j. š. | sever Grónska (83,6°), Ellesmere (83,1°), Svalbard (80,8°), Zem Františka Jozefa (81,8°) |
-| 1440 × 900 | 78,4° | 63° | sever Grónska, Ellesmere, sever Svalbardu, Zem Františka Jozefa |
-| 1680 × 1050 | 78,6° | 63,4° | to isté |
-| 1920 × 1080 | 76,3° | 58,3° | to isté |
-| 2560 × 1440 | 76,5° | 58,9° | to isté |
-| 3840 × 2160 | 76,8° | 59,5° | to isté |
-| telefón 390 × 844 | 76,8° | (celý juh) | to isté |
+## Orezanie pohľadu
 
-Vľavo je celá Aljaška (aj s mysom Dežnev Čukotky, pozri vyššie), vpravo Aleuty a Čukotka po 180°. Ohňová zem a Nový Zéland sú celé všade.
+Úvodná mapa nie je väčšia než okno; orezanie robí pohľad. Svet presne vyplní šírku okna (zoom = log₂(šírka / 512)), takže výška sa odreže. **Teraz** mapa sedí tak nízko, ako sa dá, aby Ohňová zem ostala v pohľade (12 px nad spodným okrajom na počítači; na telefóne nad popisom zápasu) – hore je teda vidieť čo najviac Arktídy. Keby sa sever zmestil celý, mapa sa vycentruje.
 
-Možnosti, ak by to majiteľ chcel zmeniť (nič z toho nie je v tomto PR):
+| Okno | Sever pred → teraz | Juh pred → teraz |
+|---|---|---|
+| 1280 × 720 | 75,7° → 75,4° | 57° → 57,7° j. š. |
+| 1680 × 1050 | 78,6° → 80,8° | 63,4° → 57,3° |
+| 1920 × 1080 | 76,3° → 76,7° | 58,3° → 57,2° |
+| 2560 × 1440 | 76,5° → 77,4° | 58,9° → 56,9° |
+| telefón 390 × 844 | 76,8° → 76,7° | (nad popisom zápasu) |
 
-1. **Nechať tak** – na väčšine máp sveta v Mercatore je Arktída orezaná; nič podstatné pre fanúšikov tam nie je (Grónsko je vidieť, chýba jeho severný cíp).
-2. **Povoliť pohľad užší než svet** (prázdne pásy vľavo a vpravo), aby sa zmestil celý sever. Mapa by bola menšia; v MapLibre to vyžaduje vlastné obmedzenie pohľadu namiesto `renderWorldCopies: false`.
-3. **Posunúť východnú Čukotku za 180°** (súradnice 180–190°) v `scripts/build-countries.mjs` a kresliť kópie sveta (`renderWorldCopies: true`) s orezaním – Čukotka by bola celá pri Rusku, ako zamýšľa `fitWorld()`. Zmena dát aj rozloženia, treba overiť aj mapu zápasu pri posúvaní.
+Stále mimo pohľadu: severný cíp Grónska (83,6°) a Ellesmere (83,1°); pri 1680 × 1050 je už Svalbard (80,8°) celý. Pri 1280 × 720 a na telefóne už predchádzajúce zarámovanie sedelo takmer rovnako nízko, rozdiel je zanedbateľný. Ohňová zem a Nový Zéland sú celé všade; mapa neprekrýva nadpis, tlačidlá ani popis zápasu (snímky v PR).
 
 ## Plynulosť animácie a načítanie
 

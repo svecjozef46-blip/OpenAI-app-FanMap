@@ -272,7 +272,10 @@ export const maplibreEngine: MapEngine = {
     const map = new maplibregl.Map({
       container,
       style: buildStyle({ withHover, countryLabels, interactive }),
-      renderWorldCopies: false,
+      // The home-page map shows 169° W – 191° E (frameHeroWorld in
+      // lib/mapSetup.ts), so what lies past 180° comes from the next copy
+      // of the world; the match map shows one world and no copies.
+      renderWorldCopies: !interactive,
       bounds: WORLD_BOUNDS,
       maxZoom: MAPLIBRE_MAX_ZOOM,
       // Resizing is handled by each component's ResizeObserver.

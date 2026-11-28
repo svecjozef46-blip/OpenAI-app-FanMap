@@ -50,8 +50,8 @@ export const WORLD_BOUNDS: [[number, number], [number, number]] = [
 // East edge: longitude 190 rather than 180, so Russia's eastern tip stays
 // attached to Russia instead of being cut off and shown beside Alaska.
 // (MapLibre, with renderWorldCopies off, shows nothing past 180° and keeps
-// the view to one world, so there the tip does show beside Alaska; see
-// docs/maplibre-comparison/fidelity.md.)
+// the view to one world, so on the match map the tip shows beside Alaska;
+// the MapLibre home-page map uses frameHeroWorld() below instead.)
 // North: capped at 75° (Mercator stretches the empty Arctic enormously).
 // South: Tierra del Fuego. Antarctica is left out entirely (also filtered
 // from the layers, see WORLDVIEW_FILTER): it has no fans, and in Mercator it
@@ -94,6 +94,38 @@ export function fitWorld(map: mapboxgl.Map, padding: MapPadding) {
   const offsetX = (box.minX + box.maxX) / 2 - (padding.left + availableWidth / 2);
   const offsetY = (box.minY + box.maxY) / 2 - (padding.top + availableHeight / 2);
   map.panBy([offsetX, offsetY], { animate: false });
+}
+
+// MapLibre home-page map: exactly one world wide, from 169° W to 191° E.
+// The left edge runs through the Bering Strait, between Alaska's western
+// tip (168.1° W) and Russia's eastern tip, Cape Dezhnev (169.7° W = 190.3°
+// E), so Alaska and Chukotka are both whole (scripts/build-countries.mjs
+// keeps Chukotka joined to Russia across 180°). Vertically it sits as low
+// as it can with Tierra del Fuego still in view, so as little of the
+// Arctic as possible is cut off at the top; if the whole north fits, it's
+// centred. Needs renderWorldCopies (what lies past 180° is drawn from the
+// next copy of the world); a view exactly one world wide shows nothing
+// twice.
+const HERO_WEST_EDGE = -169;
+const HERO_NORTH = 83.7; // Greenland's northern tip
+const HERO_SOUTH = -56; // Tierra del Fuego
+export function frameHeroWorld(map: mapboxgl.Map, padding: MapPadding) {
+  const container = map.getContainer();
+  const width = container.clientWidth;
+  const height = container.clientHeight;
+  if (width <= 0 || height <= 0) return;
+  const zoom = Math.log2(width / 512); // the world (512 px at zoom 0) as wide as the map
+  // Web Mercator, in pixels from the top of the world at this zoom.
+  const toY = (lat: number) => (0.5 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / (2 * Math.PI)) * width;
+  const toLat = (y: number) => (360 / Math.PI) * Math.atan(Math.exp((0.5 - y / width) * 2 * Math.PI)) - 90;
+  const north = toY(HERO_NORTH);
+  const south = toY(HERO_SOUTH);
+  const available = height - padding.top - padding.bottom;
+  const centreY =
+    south - north <= available
+      ? (north + south) / 2 - (padding.top + available / 2 - height / 2)
+      : south - (height - padding.bottom - height / 2);
+  map.jumpTo({ center: [HERO_WEST_EDGE + 180, toLat(centreY)], zoom });
 }
 
 // The tileset contains several overlapping versions of disputed borders

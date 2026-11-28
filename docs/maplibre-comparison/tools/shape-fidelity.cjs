@@ -107,7 +107,16 @@ async function measure(page, mapVar, DIFF) {
       // Projected source outline per country, and its pixel bounding box.
       const jobs = CHECKED.map((code, idx) => {
         const rings = [];
-        for (const poly of source[code] ?? []) for (const ring of poly) rings.push(ring.map(([x, y]) => project(x, y)));
+        // Shapes near 180° are also drawn one world to the left or right
+        // (MapLibre repeats what lies past 180°, and the home-page map shows
+        // 169° W – 191° E): the same ring ±360°. Off-screen copies are cut
+        // off with the box below.
+        for (const poly of source[code] ?? []) for (const ring of poly) {
+          rings.push(ring.map(([x, y]) => project(x, y)));
+          const xs = ring.map(([x]) => x);
+          if (Math.max(...xs) > 160) rings.push(ring.map(([x, y]) => project(x - 360, y)));
+          if (Math.min(...xs) < -160) rings.push(ring.map(([x, y]) => project(x + 360, y)));
+        }
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         for (const r of rings) for (const [x, y] of r) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
         const pad = 6;
@@ -407,8 +416,8 @@ async function measure(page, mapVar, DIFF) {
             "Canada N (Ellesmere)": [-70.0, 83.1],
             "Alaska W (Cape Prince of Wales)": [-168.1, 65.6],
             "Aleutians W (Attu)": [172.9, 52.9],
-            "Chukotka E (Cape Dezhnev)": [-169.7, 66.1],
-            "Chukotka E, east of 180°": [180, 66.1],
+            "Chukotka E (Cape Dezhnev), as 169.7° W": [-169.7, 66.1],
+            "Chukotka E (Cape Dezhnev), as 190.3° E": [190.3, 66.1],
             "Wrangel Island": [-179.5, 71.2],
             "Fiji (Taveuni, 180°)": [-180, -16.5],
             "Kiribati W (Tarawa)": [173.0, 1.4],
